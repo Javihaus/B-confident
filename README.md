@@ -8,12 +8,12 @@ Enterprise-grade uncertainty quantification for Large Language Models using Perp
 
 ## Key Features
 
-🎯 **Drop-in Replacement**: Seamless integration with Hugging Face Transformers
-📊 **Proven Performance**: 60% improvement in Expected Calibration Error
-⚡ **Efficient**: Only 19% computational overhead vs standard inference
-🏛️ **Regulatory Compliant**: EU AI Act Article 15 automated reporting
-🔄 **Production Ready**: TorchServe, FastAPI, Ray Serve integrations
-🔬 **Scientifically Grounded**: Based on information-theoretic principles
+-  Seamless integration with Hugging Face Transformers
+-  60% improvement in Expected Calibration Error
+-  Only 19% computational overhead vs standard inference
+-  EU AI Act Article 15 automated reporting
+-  TorchServe, FastAPI, Ray Serve integrations
+-  Based on information-theoretic principles
 
 ## Quick Start
 
@@ -193,7 +193,7 @@ Based on experimental validation across GPT-2, Qwen 2.5, Gemma 2, and SmolLM2:
 | **ECE** | 0.0278 | 0.0623 | 0.0556 | 0.0489 |
 | **Brier Score** | 0.1456 | 0.1891 | 0.1767 | 0.1689 |
 | **AUROC** | 0.761 | 0.687 | 0.717 | 0.739 |
-| **Overhead** | 19% | 0% | 12% | 8% |
+| **Computational Overhead** | 19% | 0% | 12% | 8% |
 
 **Key Results:**
 - 60.3% improvement in Expected Calibration Error
