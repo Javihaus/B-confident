@@ -181,12 +181,17 @@ class PBAUncertainty:
         """
         return 1.0 - np.exp(-self.config.beta * perplexity)
 
-    def calculate_token_uncertainty(self, logits: torch.Tensor) -> float:
+    def calculate_token_uncertainty(self, logits: torch.Tensor, actual_token_id: Optional[int] = None) -> float:
         """
         Calculate uncertainty for a single token prediction.
 
+        Uses simplified PBA approach aligned with paper implementation:
+        - If actual_token_id provided: calculate perplexity for that token
+        - Otherwise: use entropy-based approach over adjacent possible
+
         Args:
             logits: Raw model logits for next token prediction [vocab_size]
+            actual_token_id: If provided, calculate uncertainty for this specific token
 
         Returns:
             PBA uncertainty score in [0, 1]
@@ -201,17 +206,24 @@ class PBAUncertainty:
         # Apply temperature scaling
         scaled_logits = self._apply_temperature(logits)
 
-        # Convert to probabilities
-        probs = F.softmax(scaled_logits, dim=-1)
+        if actual_token_id is not None:
+            # Paper-aligned approach: calculate perplexity for specific token
+            log_probs = F.log_softmax(scaled_logits, dim=-1)
+            token_log_prob = log_probs[actual_token_id]
+            perplexity = torch.exp(-token_log_prob).item()
+        else:
+            # Fallback: use adjacent possible approach
+            # Convert to probabilities
+            probs = F.softmax(scaled_logits, dim=-1)
 
-        # Calculate threshold for adjacent possible
-        threshold = self._calculate_adjacent_possible_threshold(probs)
+            # Calculate threshold for adjacent possible
+            threshold = self._calculate_adjacent_possible_threshold(probs)
 
-        # Calculate entropy over adjacent possible
-        entropy = self._calculate_entropy_over_adjacent_possible(probs, threshold)
+            # Calculate entropy over adjacent possible
+            entropy = self._calculate_entropy_over_adjacent_possible(probs, threshold)
 
-        # Convert entropy to perplexity
-        perplexity = 2 ** entropy
+            # Convert entropy to perplexity
+            perplexity = 2 ** entropy
 
         # Apply sensitivity function
         uncertainty = self._perplexity_to_uncertainty(perplexity)

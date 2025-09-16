@@ -224,23 +224,26 @@ class UncertaintyTransformersModel:
                     outputs = self.model(sequence_tokens)
                     logits = outputs.logits[0, -1]  # Last position logits
 
-                # Calculate uncertainty for this position
+                # Sample next token (using temperature if specified)
+                sampling_logits = logits.clone()
+                if generation_config.temperature != 1.0:
+                    sampling_logits = sampling_logits / generation_config.temperature
+
+                probs = F.softmax(sampling_logits, dim=-1)
+                if generation_config.do_sample:
+                    next_token = torch.multinomial(probs, num_samples=1)
+                else:
+                    next_token = torch.argmax(sampling_logits, dim=-1).unsqueeze(0)
+
+                # Calculate uncertainty for the ACTUAL generated token (paper-aligned)
                 try:
-                    uncertainty = self.pba_calculator.calculate_token_uncertainty(logits)
+                    uncertainty = self.pba_calculator.calculate_token_uncertainty(
+                        logits, actual_token_id=next_token.item()
+                    )
                     sequence_uncertainties.append(uncertainty)
                 except Exception as e:
                     logger.warning(f"Error in uncertainty calculation: {e}")
                     sequence_uncertainties.append(1.0)
-
-                # Sample next token (using temperature if specified)
-                if generation_config.temperature != 1.0:
-                    logits = logits / generation_config.temperature
-
-                probs = F.softmax(logits, dim=-1)
-                if generation_config.do_sample:
-                    next_token = torch.multinomial(probs, num_samples=1)
-                else:
-                    next_token = torch.argmax(logits, dim=-1).unsqueeze(0)
 
                 # Append token to sequence
                 sequence_tokens = torch.cat([sequence_tokens, next_token.unsqueeze(0)], dim=1)
