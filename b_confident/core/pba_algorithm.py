@@ -27,12 +27,12 @@ class PBAConfig:
     Configuration for PBA uncertainty quantification.
 
     Parameters validated through systematic analysis in the paper:
-    - α = 0.9 provides optimal balance between coverage and efficiency
     - β = 0.5 provides appropriate sensitivity without oversensitivity
+
+    Note: α (alpha) parameter removed as paper uses simple token-perplexity approach
     """
 
     # Core PBA parameters (validated in paper)
-    alpha: float = 0.9  # Probability mass threshold (optimal from paper)
     beta: float = 0.5   # Sensitivity parameter (optimal from paper)
 
     # Computational parameters
@@ -50,9 +50,6 @@ class PBAConfig:
 
     def __post_init__(self):
         """Validate configuration parameters"""
-        if not 0.0 < self.alpha <= 1.0:
-            raise ValueError(f"alpha must be in (0, 1], got {self.alpha}")
-
         if self.beta <= 0.0:
             raise ValueError(f"beta must be positive, got {self.beta}")
 
@@ -67,20 +64,20 @@ class PBAUncertainty:
     """
     PBA Uncertainty Estimation Implementation
 
-    Implements Algorithm 1 from the paper with optimizations for production use.
+    Implements the paper-aligned PBA methodology with simplified approach.
 
     The algorithm computes uncertainty as:
     1. Forward pass to get logits
-    2. Convert to probabilities via softmax
-    3. Define adjacent possible P(c) based on probability threshold
-    4. Calculate entropy over adjacent possible
-    5. Convert to perplexity: perplexity = 2^entropy
-    6. Apply sensitivity function: f(p) = 1 - exp(-β·p)
+    2. Convert to log probabilities via log_softmax
+    3. Calculate token perplexity: perplexity = exp(-log P(token))
+    4. Apply sensitivity function: f(p) = 1 - exp(-β·p)
+
+    This matches the exact methodology used in the paper experiments.
 
     Example:
-        >>> config = PBAConfig(alpha=0.9, beta=0.5)
+        >>> config = PBAConfig(beta=0.5)
         >>> pba = PBAUncertainty(config)
-        >>> uncertainty = pba.calculate_uncertainty(logits)
+        >>> uncertainty = pba.calculate_token_uncertainty(logits, token_id)
     """
 
     def __init__(self, config: Optional[PBAConfig] = None):
@@ -96,7 +93,7 @@ class PBAUncertainty:
         if self.config.device is None:
             self.config.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        logger.info(f"Initialized PBA with α={self.config.alpha}, β={self.config.beta}")
+        logger.info(f"Initialized PBA with β={self.config.beta} (paper-aligned simple approach)")
 
     def _validate_logits(self, logits: torch.Tensor) -> None:
         """Validate input logits tensor"""
@@ -185,13 +182,11 @@ class PBAUncertainty:
         """
         Calculate uncertainty for a single token prediction.
 
-        Uses simplified PBA approach aligned with paper implementation:
-        - If actual_token_id provided: calculate perplexity for that token
-        - Otherwise: use entropy-based approach over adjacent possible
+        Uses paper-aligned simple approach: perplexity = exp(-log P(token))
 
         Args:
             logits: Raw model logits for next token prediction [vocab_size]
-            actual_token_id: If provided, calculate uncertainty for this specific token
+            actual_token_id: Token ID to calculate uncertainty for. If None, uses max probability token.
 
         Returns:
             PBA uncertainty score in [0, 1]
@@ -206,26 +201,22 @@ class PBAUncertainty:
         # Apply temperature scaling
         scaled_logits = self._apply_temperature(logits)
 
+        # Convert to log probabilities
+        log_probs = F.log_softmax(scaled_logits, dim=-1)
+
         if actual_token_id is not None:
-            # Paper-aligned approach: calculate perplexity for specific token
-            log_probs = F.log_softmax(scaled_logits, dim=-1)
+            # Use specified token
             token_log_prob = log_probs[actual_token_id]
-            perplexity = torch.exp(-token_log_prob).item()
         else:
-            # Fallback: use adjacent possible approach
-            # Convert to probabilities
-            probs = F.softmax(scaled_logits, dim=-1)
+            # Use most probable token as fallback
+            max_token_id = torch.argmax(scaled_logits, dim=-1)
+            token_log_prob = log_probs[max_token_id]
 
-            # Calculate threshold for adjacent possible
-            threshold = self._calculate_adjacent_possible_threshold(probs)
+        # Paper-aligned approach: calculate perplexity for the token
+        # perplexity = exp(-log P(token))
+        perplexity = torch.exp(-token_log_prob).item()
 
-            # Calculate entropy over adjacent possible
-            entropy = self._calculate_entropy_over_adjacent_possible(probs, threshold)
-
-            # Convert entropy to perplexity
-            perplexity = 2 ** entropy
-
-        # Apply sensitivity function
+        # Apply sensitivity function: f(p) = 1 - exp(-β·p)
         uncertainty = self._perplexity_to_uncertainty(perplexity)
 
         return uncertainty
