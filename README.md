@@ -8,12 +8,12 @@ Enterprise-grade uncertainty quantification for Large Language Models using Perp
 
 ## Key Features
 
--  Seamless integration with Hugging Face Transformers
--  60% improvement in Expected Calibration Error
--  Only 19% computational overhead vs standard inference
--  EU AI Act Article 15 automated reporting
--  TorchServe, FastAPI, Ray Serve integrations
--  Based on information-theoretic principles
+-  [ ] Seamless integration with Hugging Face Transformers
+-  [ ] 60% improvement in Expected Calibration Error
+-  [ ] Only 19% computational overhead vs standard inference
+-  [ ] EU AI Act Article 15 automated reporting
+-  [ ] TorchServe, FastAPI, Ray Serve integrations
+-  [ ] Based on information-theoretic principles
 
 ## Quick Start
 
