@@ -1,0 +1,32 @@
+# Requirements for B-Confident SDK Expert Evaluation
+# Install with: pip install -r requirements.txt
+
+# Core ML frameworks
+torch>=1.13.0
+transformers>=4.20.0
+accelerate>=0.20.0
+datasets>=2.10.0
+
+# Evaluation and metrics
+evaluate>=0.4.0
+scikit-learn>=1.2.0
+
+# Data processing and visualization
+numpy>=1.21.0
+pandas>=1.4.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Jupyter notebook support
+jupyter>=1.0.0
+ipykernel>=6.0.0
+
+# Optional: For GPU acceleration
+# nvidia-ml-py3>=7.352.0
+
+# Development and testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
