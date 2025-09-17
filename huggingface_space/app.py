@@ -43,6 +43,13 @@ class UncertaintyDemo:
             "gpt2": "GPT-2 (117M)",
             "distilgpt2": "DistilGPT-2 (82M)",
             "microsoft/DialoGPT-small": "DialoGPT Small (117M)",
+            "microsoft/DialoGPT-medium": "DialoGPT Medium (345M)",
+            "EleutherAI/gpt-neo-125M": "GPT-Neo 125M",
+            "EleutherAI/gpt-neo-1.3B": "GPT-Neo 1.3B",
+            "facebook/opt-125m": "OPT 125M",
+            "facebook/opt-350m": "OPT 350M",
+            "google/flan-t5-small": "Flan-T5 Small (77M)",
+            "google/flan-t5-base": "Flan-T5 Base (220M)"
         }
 
         self.example_texts = [
@@ -135,10 +142,10 @@ class UncertaintyDemo:
 
             results.append({
                 "Input Text": text,
-                "PBA": pba_uncertainty,
-                "Max Softmax": max_softmax,
-                "Predictive Entropy": predictive_entropy,
-                "Temperature Scaling": temperature_scaling
+                "PBA": round(pba_uncertainty, 2),
+                "Max Softmax": round(max_softmax, 2),
+                "Predictive Entropy": round(predictive_entropy, 2),
+                "Temperature Scaling": round(temperature_scaling, 2)
             })
 
         return pd.DataFrame(results)
@@ -258,11 +265,11 @@ The PBA methodology resolves fundamental limitations in current uncertainty quan
 # Initialize demo
 demo_app = UncertaintyDemo()
 
-def uncertainty_interface(model_name, input_text, max_length, alpha, beta):
+def uncertainty_interface(model_name, input_text, max_length):
     """Main uncertainty quantification interface"""
 
     result = demo_app.generate_with_uncertainty(
-        model_name, input_text, max_length, alpha, beta
+        model_name, input_text, max_length, 0.9, 0.5  # Use paper-optimized defaults
     )
 
     if not result["success"]:
@@ -330,12 +337,13 @@ def comparison_interface(model_name, custom_texts):
 def calibration_interface(model_name, n_samples):
     """Calibration demonstration interface"""
 
-    # Generate synthetic calibration data
-    np.random.seed(42)
-    uncertainties = np.random.beta(2, 2, n_samples)  # More realistic distribution
+    # Generate synthetic calibration data with dynamic seed based on n_samples
+    np.random.seed(int(n_samples))
+    uncertainties = np.random.beta(2, 2, int(n_samples))  # More realistic distribution
 
     # Simulate accuracy correlation (higher uncertainty -> lower accuracy)
     accuracies = []
+    np.random.seed(int(n_samples) + 1)  # Different seed for accuracy simulation
     for u in uncertainties:
         # Inverse relationship with noise
         prob_correct = max(0.1, min(0.9, 1.0 - u + np.random.normal(0, 0.1)))
@@ -423,20 +431,6 @@ with gr.Blocks(title="B-Confident Uncertainty Quantification Demo", theme=gr.the
                         label="Max Generation Length"
                     )
 
-                    with gr.Row():
-                        alpha_slider = gr.Slider(
-                            minimum=0.5,
-                            maximum=0.99,
-                            value=0.9,
-                            label="Alpha (Probability Mass Threshold)"
-                        )
-
-                        beta_slider = gr.Slider(
-                            minimum=0.1,
-                            maximum=1.0,
-                            value=0.5,
-                            label="Beta (Sensitivity Parameter)"
-                        )
 
                     generate_btn = gr.Button("Generate with Uncertainty", variant="primary")
 
@@ -447,7 +441,7 @@ with gr.Blocks(title="B-Confident Uncertainty Quantification Demo", theme=gr.the
 
             generate_btn.click(
                 uncertainty_interface,
-                inputs=[model_dropdown, input_text, max_length, alpha_slider, beta_slider],
+                inputs=[model_dropdown, input_text, max_length],
                 outputs=[uncertainty_output, perplexity_plot, uncertainty_score]
             )
 
@@ -514,57 +508,34 @@ with gr.Blocks(title="B-Confident Uncertainty Quantification Demo", theme=gr.the
                 outputs=[calibration_plot, calibration_metrics]
             )
 
-        # Regulatory compliance tab
-        with gr.Tab("Regulatory Compliance"):
-            gr.Markdown("### Generate EU AI Act Article 15 compliance documentation")
-
-            with gr.Row():
-                with gr.Column():
-                    system_name = gr.Textbox(
-                        label="AI System Name",
-                        value="Production LLM System",
-                        placeholder="Enter your system name"
-                    )
-
-                    compliance_model = gr.Dropdown(
-                        choices=list(demo_app.available_models.keys()),
-                        label="Model Architecture",
-                        value="gpt2"
-                    )
-
-                    compliance_btn = gr.Button("Generate Compliance Report", variant="primary")
-
-                with gr.Column():
-                    gr.Markdown("#### Key Compliance Features")
-                    gr.Markdown("""
-                    - **Systematic Uncertainty Measurement**
-                    - **Calibration Validation Protocols**
-                    - **Automated Monitoring Capabilities**
-                    - **Performance Documentation Standards**
-                    - **Audit Trail Generation**
-                    """)
-
-            compliance_output = gr.Textbox(
-                label="Compliance Report",
-                lines=20,
-                max_lines=30
-            )
-
-            compliance_btn.click(
-                compliance_interface,
-                inputs=[system_name, compliance_model],
-                outputs=[compliance_output]
-            )
 
     # Footer information
     gr.Markdown("""
     ---
 
-    ### About This Demo
+    ### Developer Integration
 
-    This interactive demonstration showcases **infrastructure for reliable deployment of current transformer architectures** while preparing for genuine intelligence principles. The community learns through experimentation - use these tools to explore uncertainty quantification behavior with your models and datasets.
+    **Performance Impact:** PBA adds only 19% computational overhead vs 300-500% for ensemble methods, making it practical for production deployment.
 
-    **Scientific Position:** Essential infrastructure for regulatory compliance and production reliability, clearly distinguished from fundamental advances in AI architecture. This creates experimental infrastructure for collecting behavioral data about uncertainty quantification at scale.
+    **HuggingFace Integration:** Easy adoption with existing transformer workflows:
+
+    ```python
+    # This is what adoption looks like
+    from transformers import pipeline
+    from b_confident import uncertainty_generate
+
+    # Replace standard generation
+    result = uncertainty_generate(
+        model_name="gpt2",
+        input_text="Your prompt here",
+        max_length=50
+    )
+
+    print("Generated: " + result.generated_texts[0])
+    print("Uncertainty: " + str(round(result.uncertainty_scores[0], 3)))
+    ```
+
+    **Time Reduction:** PBA provides calibrated uncertainty in a single forward pass, eliminating the need for multiple model runs or complex ensemble methods.
 
     **Repository:** [B-Confident on GitHub](https://github.com/javiermarin/b-confident)
     """)
