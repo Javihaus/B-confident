@@ -276,8 +276,10 @@ def uncertainty_interface(model_name, input_text, max_length, alpha, beta):
         fig = go.Figure(data=go.Bar(
             x=tokens[:len(perplexities)],
             y=perplexities,
-            marker_color=perplexities,
-            colorscale='Reds'
+            marker=dict(
+                color=perplexities,
+                colorscale='Reds'
+            )
         ))
         fig.update_layout(
             title="Token-level Perplexity Scores",
