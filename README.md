@@ -99,7 +99,7 @@ where f(p) = 1 - exp(-β·p)
 ### FastAPI Integration
 
 ```python
-from uncertainty_pba.serving import create_uncertainty_api
+from b_confident.serving import create_uncertainty_api
 
 app = create_uncertainty_api("gpt2")
 # Run with: uvicorn main:app --host 0.0.0.0 --port 8000
@@ -108,7 +108,7 @@ app = create_uncertainty_api("gpt2")
 ### TorchServe Handler
 
 ```python
-from uncertainty_pba.serving import PBAUncertaintyHandler
+from b_confident.serving import PBAUncertaintyHandler
 
 # Use as custom TorchServe handler
 # See examples/torchserve/ for complete deployment
@@ -117,7 +117,7 @@ from uncertainty_pba.serving import PBAUncertaintyHandler
 ### Ray Serve Deployment
 
 ```python
-from uncertainty_pba.serving import deploy_pba_service
+from b_confident.serving import deploy_pba_service
 
 deploy_pba_service(
     model_name="gpt2",
@@ -274,7 +274,7 @@ print(f"High uncertainty samples: {results['highest_uncertainty_samples']}")
 
 ### Custom Serving Endpoint
 ```python
-from uncertainty_pba.serving import PBAAPIServer
+from b_confident.serving import PBAAPIServer
 
 server = PBAAPIServer(
     model_name_or_path="microsoft/DialoGPT-small",
@@ -321,6 +321,16 @@ git clone https://github.com/javiermarin/b-confident.git
 cd b-confident
 pip install -e ".[dev,all]"
 pytest tests/
+```
+
+**Note**: The repository uses a `src/` directory layout. When installing from source:
+
+```bash
+# For local development
+pip install -e .
+
+# For direct GitHub installation
+pip install git+https://github.com/javiermarin/b-confident.git
 ```
 
 ### Running Tests
