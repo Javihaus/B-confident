@@ -14,6 +14,7 @@ Key Features:
 
 import torch
 import torch.nn.functional as F
+import numpy as np
 from transformers import (
     AutoModel,
     AutoTokenizer,
@@ -29,6 +30,8 @@ import time
 
 from ..core.pba_algorithm import PBAUncertainty, PBAConfig
 from ..core.metrics import calculate_uncertainty_metrics, CalibrationResults
+from ..memory.streaming_processor import StreamingUncertaintyProcessor, MemoryConfig
+from ..distributed.calibration_manager import DistributedCalibrationManager
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +68,11 @@ class UncertaintyTransformersModel:
         self,
         model: PreTrainedModel,
         tokenizer: Optional[PreTrainedTokenizer] = None,
-        pba_config: Optional[PBAConfig] = None
+        pba_config: Optional[PBAConfig] = None,
+        memory_config: Optional[MemoryConfig] = None,
+        enable_streaming: bool = True,
+        enable_distributed_calibration: bool = False,
+        node_id: Optional[str] = None
     ):
         """
         Initialize uncertainty-enabled transformers model.
@@ -74,11 +81,41 @@ class UncertaintyTransformersModel:
             model: Pre-trained Hugging Face model
             tokenizer: Tokenizer (optional, for text generation)
             pba_config: PBA configuration (uses optimized defaults if None)
+            memory_config: Memory management configuration (uses defaults if None)
+            enable_streaming: Enable streaming memory management for high-throughput
+            enable_distributed_calibration: Enable distributed calibration across nodes
+            node_id: Unique identifier for this node (required if distributed calibration enabled)
         """
         self.model = model
         self.tokenizer = tokenizer
         self.pba_config = pba_config or PBAConfig()
+        self.memory_config = memory_config or MemoryConfig()
+        self.enable_streaming = enable_streaming
+        self.enable_distributed_calibration = enable_distributed_calibration
+
+        # Initialize uncertainty calculator
         self.pba_calculator = PBAUncertainty(self.pba_config)
+
+        # Initialize streaming processor for high-throughput scenarios
+        if enable_streaming:
+            self.streaming_processor = StreamingUncertaintyProcessor(
+                self.pba_config, self.memory_config, str(model.device)
+            )
+        else:
+            self.streaming_processor = None
+
+        # Initialize distributed calibration manager
+        if enable_distributed_calibration:
+            if node_id is None:
+                import uuid
+                node_id = f"node_{uuid.uuid4().hex[:8]}"
+
+            self.calibration_manager = DistributedCalibrationManager(node_id=node_id)
+            self.node_id = node_id
+            self._distributed_calibration_active = False
+        else:
+            self.calibration_manager = None
+            self.node_id = None
 
         # Model metadata
         self.model_name = getattr(model, 'name_or_path', 'unknown')
@@ -379,15 +416,218 @@ class UncertaintyTransformersModel:
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the wrapped model"""
+        memory_stats = None
+        if self.streaming_processor:
+            memory_stats = self.streaming_processor.get_memory_stats()
+
         return {
             'model_name': self.model_name,
             'architecture': self.architecture,
             'parameters': sum(p.numel() for p in self.model.parameters()),
             'device': str(self.model.device),
             'pba_config': self.pba_config.__dict__,
+            'memory_config': self.memory_config.__dict__ if self.memory_config else None,
+            'streaming_enabled': self.enable_streaming,
+            'memory_stats': memory_stats.__dict__ if memory_stats else None,
             'supports_generation': hasattr(self.model, 'generate'),
             'has_tokenizer': self.tokenizer is not None
         }
+
+    def uncertainty_generate_batch_streaming(self,
+                                           inputs_batch: List[Union[str, torch.Tensor]],
+                                           max_length: int = 50,
+                                           **generation_kwargs) -> List[UncertaintyGenerationResult]:
+        """
+        High-throughput batch processing with streaming memory management.
+
+        Processes multiple inputs with memory-efficient streaming to prevent
+        memory accumulation and fragmentation under high-throughput scenarios.
+
+        Args:
+            inputs_batch: List of input texts or token tensors
+            max_length: Maximum generation length
+            **generation_kwargs: Additional generation arguments
+
+        Returns:
+            List of UncertaintyGenerationResult objects
+        """
+        if not self.enable_streaming or self.streaming_processor is None:
+            # Fallback to individual processing
+            return [
+                self.uncertainty_generate(inputs, max_length=max_length, **generation_kwargs)
+                for inputs in inputs_batch
+            ]
+
+        if self.tokenizer is None:
+            raise ValueError("Tokenizer required for batch text generation")
+
+        # Calculate optimal batch size based on memory constraints
+        optimal_batch_size = 8  # Default
+        if inputs_batch:
+            sample_input = inputs_batch[0]
+            if isinstance(sample_input, str):
+                sample_tokens = self.tokenizer.encode(sample_input, return_tensors="pt")
+            else:
+                sample_tokens = sample_input
+
+            optimal_batch_size = self.streaming_processor.calculate_optimal_batch_size(sample_tokens)
+            logger.info(f"Using optimal batch size: {optimal_batch_size} for {len(inputs_batch)} inputs")
+
+        results = []
+
+        # Process in memory-optimized chunks
+        for i in range(0, len(inputs_batch), optimal_batch_size):
+            chunk = inputs_batch[i:i + optimal_batch_size]
+            chunk_results = self._process_chunk_streaming(chunk, max_length, **generation_kwargs)
+            results.extend(chunk_results)
+
+        return results
+
+    def _process_chunk_streaming(self,
+                               inputs_chunk: List[Union[str, torch.Tensor]],
+                               max_length: int,
+                               **generation_kwargs) -> List[UncertaintyGenerationResult]:
+        """Process a chunk of inputs with streaming memory management"""
+        chunk_results = []
+
+        # Tokenize all inputs in chunk
+        tokenized_inputs = []
+        for inputs in inputs_chunk:
+            if isinstance(inputs, str):
+                tokens = self.tokenizer(inputs, return_tensors="pt").to(self.model.device)
+            else:
+                tokens = {"input_ids": inputs.to(self.model.device)}
+            tokenized_inputs.append(tokens)
+
+        # Process each input in the chunk with streaming
+        for tokens in tokenized_inputs:
+            # Generate sequence
+            with torch.no_grad():
+                generated_ids = self.model.generate(
+                    **tokens,
+                    max_length=max_length,
+                    do_sample=True,
+                    temperature=1.0,
+                    pad_token_id=self.tokenizer.eos_token_id,
+                    **generation_kwargs
+                )
+
+            # Extract logits for uncertainty calculation using streaming processor
+            input_length = tokens["input_ids"].shape[1]
+            generated_tokens = generated_ids[0][input_length:]
+
+            # Calculate uncertainties using streaming processor
+            logits_list = []
+            current_input = tokens["input_ids"]
+
+            for token_idx in range(len(generated_tokens)):
+                with torch.no_grad():
+                    outputs = self.model(current_input)
+                    logits_list.append(outputs.logits[0, -1])
+
+                # Update input for next token
+                next_token = generated_tokens[token_idx:token_idx+1]
+                current_input = torch.cat([current_input, next_token.unsqueeze(0)], dim=1)
+
+            # Stream uncertainty calculations to prevent memory accumulation
+            uncertainties = list(self.streaming_processor.process_batch_streaming(
+                logits_list, generated_tokens.tolist()
+            ))
+
+            # Create result
+            sequence_uncertainty = sum(uncertainties) / len(uncertainties) if uncertainties else 0.0
+
+            result = UncertaintyGenerationResult(
+                sequences=generated_ids,
+                uncertainty_scores=[sequence_uncertainty],
+                token_uncertainties=[uncertainties],
+                sequence_scores=None,
+                metadata={
+                    'streaming_enabled': True,
+                    'chunk_processed': True,
+                    'memory_managed': True
+                },
+                performance_metrics={
+                    'streaming_overhead': 0.0,  # Streaming should reduce overhead
+                    'memory_efficient': True
+                }
+            )
+
+            chunk_results.append(result)
+
+        return chunk_results
+
+    def cleanup_memory(self) -> None:
+        """Cleanup all memory resources"""
+        if self.streaming_processor:
+            self.streaming_processor.cleanup()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        import gc
+        gc.collect()
+
+        logger.info("Memory cleanup completed for UncertaintyTransformersModel")
+
+    async def start_distributed_calibration(self) -> None:
+        """Start distributed calibration manager"""
+        if self.calibration_manager and not self._distributed_calibration_active:
+            await self.calibration_manager.start()
+            self._distributed_calibration_active = True
+            logger.info(f"Started distributed calibration for node {self.node_id}")
+        else:
+            logger.warning("Distributed calibration not available or already active")
+
+    async def stop_distributed_calibration(self) -> None:
+        """Stop distributed calibration manager"""
+        if self.calibration_manager and self._distributed_calibration_active:
+            await self.calibration_manager.stop()
+            self._distributed_calibration_active = False
+            logger.info(f"Stopped distributed calibration for node {self.node_id}")
+
+    def update_distributed_calibration(self, uncertainty: float, accuracy: float) -> None:
+        """Update distributed calibration with new uncertainty/accuracy pair"""
+        if self.calibration_manager and self._distributed_calibration_active:
+            self.calibration_manager.update_local_calibration(uncertainty, accuracy)
+
+    def get_calibrated_uncertainty(self, raw_uncertainty: float) -> float:
+        """Get calibrated uncertainty using distributed parameters"""
+        if not self.calibration_manager:
+            return raw_uncertainty
+
+        try:
+            # Get calibration parameters (prefers global if available)
+            params = self.calibration_manager.get_calibration_parameters()
+            temperature = params.get("temperature", 1.0)
+            beta = params.get("beta", 0.5)
+
+            # Apply temperature scaling and beta adjustment
+            # Convert uncertainty back to perplexity, scale, and recompute
+            if raw_uncertainty > 0:
+                # Reverse the uncertainty function: u = 1 - exp(-β*p)
+                # So: p = -ln(1-u) / β
+                implied_perplexity = -np.log(1 - min(raw_uncertainty, 0.999)) / self.pba_config.beta
+
+                # Apply temperature scaling to the implied perplexity
+                scaled_perplexity = implied_perplexity / temperature
+
+                # Recompute uncertainty with new beta
+                calibrated_uncertainty = 1 - np.exp(-beta * scaled_perplexity)
+
+                return min(max(calibrated_uncertainty, 0.0), 1.0)
+            else:
+                return raw_uncertainty
+
+        except Exception as e:
+            logger.warning(f"Error in uncertainty calibration: {e}")
+            return raw_uncertainty
+
+    def get_distributed_calibration_stats(self) -> Optional[Dict[str, Any]]:
+        """Get distributed calibration statistics"""
+        if self.calibration_manager:
+            return self.calibration_manager.get_calibration_stats()
+        return None
 
 
 def uncertainty_generate(

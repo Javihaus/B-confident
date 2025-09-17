@@ -73,14 +73,14 @@ def perform_comprehensive_calibration_analysis():
     # Get validation data
     validation_texts, validation_labels = simulate_production_validation_data()
 
-    print(f"📊 Validation Dataset:")
+    print(f"[METRICS] Validation Dataset:")
     print(f"   - Total samples: {len(validation_texts)}")
     print(f"   - Expected correct: {sum(validation_labels)}")
     print(f"   - Expected incorrect: {len(validation_labels) - sum(validation_labels)}")
     print()
 
     # Perform calibration with paper-optimized parameters
-    print("🎯 Running calibration analysis with PBA method...")
+    print("[TARGET] Running calibration analysis with PBA method...")
 
     # Use paper-validated optimal parameters
     pba_config = PBAConfig(
@@ -115,7 +115,7 @@ def perform_comprehensive_calibration_analysis():
         print(f"   AUROC: {cv_results['auroc_mean']:.4f} ± {cv_results['auroc_std']:.4f}")
         print(f"   Stability: {cv_results['stability_mean']:.4f} ± {cv_results['stability_std']:.4f}")
 
-    print("\n✅ Calibration Quality Assessment:")
+    print("\n[OK] Calibration Quality Assessment:")
     if calibration.ece < 0.03:
         print("   🟢 Excellent calibration (ECE < 3%)")
     elif calibration.ece < 0.05:
@@ -182,7 +182,7 @@ def generate_eu_ai_act_compliance_report(calibration_results: Dict[str, Any]):
     print(f"   JSON: {json_path}")
 
     # Display key compliance metrics
-    print("\n🎯 Key Article 15 Compliance Metrics:")
+    print("\n[TARGET] Key Article 15 Compliance Metrics:")
     acc_metrics = structured_report.accuracy_metrics
     print(f"   Expected Calibration Error: {acc_metrics['expected_calibration_error']:.4f}")
     print(f"   Brier Score: {acc_metrics['brier_score']:.4f}")
@@ -226,7 +226,7 @@ def setup_continuous_monitoring(calibration_results: Dict[str, Any]):
         window_size=1000  # Monitor last 1000 samples
     )
 
-    print("📊 Monitor Configuration:")
+    print("[METRICS] Monitor Configuration:")
     baseline = calibration_results["calibration_results"]
     print(f"   Baseline ECE: {baseline.ece:.4f}")
     print(f"   Baseline Brier Score: {baseline.brier_score:.4f}")
@@ -317,7 +317,7 @@ def validate_against_baseline_methods(calibration_results: Dict[str, Any]):
     ]
     pba_confidences = [1.0 - u for u in pba_uncertainties]
 
-    print("📊 Method Comparison Results:")
+    print("[METRICS] Method Comparison Results:")
     print(f"{'Method':<25} {'ECE':<8} {'Improvement'}")
     print("-" * 45)
 
@@ -358,13 +358,13 @@ def generate_executive_summary():
     print("=" * 45)
 
     summary = """
-🎯 REGULATORY COMPLIANCE SUMMARY
+[TARGET] REGULATORY COMPLIANCE SUMMARY
 
 System: ProductionAISystem v2.1.0
 Methodology: Perplexity-Based Adjacency (PBA) Uncertainty Quantification
 Compliance Framework: EU AI Act Article 15
 
-✅ COMPLIANCE STATUS: COMPLIANT
+[OK] COMPLIANCE STATUS: COMPLIANT
 
 Key Achievements:
 • Achieved Expected Calibration Error < 3% (excellent calibration)
@@ -432,10 +432,10 @@ def main():
 
         print("\n🎉 Compliance Demonstration Complete!")
         print("=" * 45)
-        print("✅ All EU AI Act Article 15 requirements addressed")
-        print("✅ Comprehensive documentation generated")
-        print("✅ Continuous monitoring established")
-        print("✅ Baseline method validation completed")
+        print("[OK] All EU AI Act Article 15 requirements addressed")
+        print("[OK] Comprehensive documentation generated")
+        print("[OK] Continuous monitoring established")
+        print("[OK] Baseline method validation completed")
         print()
         print("📁 Generated Files:")
         print(f"   • Compliance Report: {markdown_path}")
@@ -449,10 +449,10 @@ def main():
         print("   4. Submit documentation to regulatory authorities")
 
     except ImportError as e:
-        print(f"❌ Import Error: {e}")
+        print(f"[ERROR] Import Error: {e}")
         print("Make sure b-confident is installed: pip install b-confident")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
 

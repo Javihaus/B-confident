@@ -317,13 +317,13 @@ def handle_calibrate(args) -> int:
 
         # Assessment
         if calibration.ece < 0.03:
-            print("\n✅ Excellent calibration (ECE < 3%)")
+            print("\n[EXCELLENT] Calibration quality: ECE < 3%")
         elif calibration.ece < 0.05:
-            print("\n✅ Good calibration (ECE < 5%)")
+            print("\n[GOOD] Calibration quality: ECE < 5%")
         elif calibration.ece < 0.10:
-            print("\n⚠️ Acceptable calibration (ECE < 10%)")
+            print("\n[ACCEPTABLE] Calibration quality: ECE < 10%")
         else:
-            print("\n❌ Poor calibration (ECE ≥ 10%) - Consider recalibration")
+            print("\n[POOR] Calibration quality: ECE >= 10% - Consider recalibration")
 
         # Save results
         output_file = args.output or f"calibration_{args.model.replace('/', '_')}.json"
@@ -521,37 +521,37 @@ def handle_validate(args) -> int:
         print("\nChecking dependencies...")
         try:
             import torch
-            print(f"✅ PyTorch: {torch.__version__}")
+            print(f"[OK] PyTorch: {torch.__version__}")
         except ImportError:
-            print("❌ PyTorch not available")
+            print("[ERROR] PyTorch not available")
             return 1
 
         try:
             import transformers
-            print(f"✅ Transformers: {transformers.__version__}")
+            print(f"[OK] Transformers: {transformers.__version__}")
         except ImportError:
-            print("❌ Transformers not available")
+            print("[ERROR] Transformers not available")
             return 1
 
         try:
             from b_confident import uncertainty_generate
-            print("✅ B-Confident core functionality")
+            print("[OK] B-Confident core functionality")
         except ImportError as e:
-            print(f"❌ B-Confident import failed: {e}")
+            print(f"[ERROR] B-Confident import failed: {e}")
             return 1
 
         # Check optional dependencies
         try:
             import fastapi
-            print(f"✅ FastAPI: {fastapi.__version__} (serving support)")
+            print(f"[OK] FastAPI: {fastapi.__version__} (serving support)")
         except ImportError:
-            print("⚠️ FastAPI not available (install with b-confident[serving])")
+            print("[WARNING] FastAPI not available (install with b-confident[serving])")
 
         try:
             import ray
-            print(f"✅ Ray: {ray.__version__} (distributed serving support)")
+            print(f"[OK] Ray: {ray.__version__} (distributed serving support)")
         except ImportError:
-            print("⚠️ Ray not available (install with b-confident[all])")
+            print("[WARNING] Ray not available (install with b-confident[all])")
 
         # Test basic functionality
         if args.model:
@@ -562,15 +562,15 @@ def handle_validate(args) -> int:
                     inputs="Test input",
                     max_length=10
                 )
-                print(f"✅ Basic generation successful")
+                print(f"[OK] Basic generation successful")
                 print(f"   Generated: {result.generated_texts[0]}")
                 print(f"   Uncertainty: {result.uncertainty_scores[0]:.4f}")
 
             except Exception as e:
-                print(f"❌ Generation test failed: {e}")
+                print(f"[ERROR] Generation test failed: {e}")
                 return 1
 
-        print("\n✅ Validation complete - setup is working correctly!")
+        print("\n[OK] Validation complete - setup is working correctly!")
         return 0
 
     except Exception as e:

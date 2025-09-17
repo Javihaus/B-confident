@@ -231,7 +231,7 @@ def batch_processing_example():
 
 def main():
     """Run all examples"""
-    print("🎯 B-Confident Quickstart Examples")
+    print("[TARGET] B-Confident Quickstart Examples")
     print("=" * 50)
     print()
 
@@ -245,7 +245,7 @@ def main():
         uncertainty_metrics_example()
         batch_processing_example()
 
-        print("✅ All examples completed successfully!")
+        print("[OK] All examples completed successfully!")
         print("\nNext Steps:")
         print("- Explore the full API in b_confident.api")
         print("- Check out serving examples in examples/serving/")
@@ -253,11 +253,11 @@ def main():
         print("- Read the full documentation at docs.b-confident.com")
 
     except ImportError as e:
-        print(f"❌ Import Error: {e}")
+        print(f"[ERROR] Import Error: {e}")
         print("\nMake sure you have b-confident installed:")
         print("pip install b-confident")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
         print("Check your installation and try again.")
 
 

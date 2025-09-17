@@ -38,6 +38,44 @@ from .integration.transformers_wrapper import (
     uncertainty_generate
 )
 
+# Memory management for high-throughput production
+from .memory.streaming_processor import (
+    StreamingUncertaintyProcessor,
+    MemoryConfig,
+    MemoryStats,
+    create_streaming_processor,
+    process_uncertainty_streaming
+)
+
+# Distributed calibration for multi-node deployments
+from .distributed.calibration_manager import (
+    DistributedCalibrationManager,
+    CalibrationState,
+    CalibrationEvent,
+    CalibrationEventType,
+    InMemoryMessageBroker,
+    RedisMessageBroker
+)
+
+# Observability and debugging for production troubleshooting
+from .observability.uncertainty_debugger import (
+    InstrumentedUncertaintyCalculator,
+    UncertaintyProvenance,
+    DebugLevel,
+    PipelineStage
+)
+from .observability.metrics_collector import (
+    UncertaintyMetricsCollector,
+    MetricsAggregator,
+    AlertManager,
+    AlertSeverity,
+    create_standard_metrics_setup
+)
+from .observability.dashboard import (
+    UncertaintyDashboard,
+    create_uncertainty_dashboard
+)
+
 # Compliance imports
 from .compliance.regulatory import (
     ComplianceReporter,
@@ -73,6 +111,34 @@ __all__ = [
     # Integration
     "UncertaintyTransformersModel",
     "uncertainty_generate",
+
+    # Memory Management
+    "StreamingUncertaintyProcessor",
+    "MemoryConfig",
+    "MemoryStats",
+    "create_streaming_processor",
+    "process_uncertainty_streaming",
+
+    # Distributed Calibration
+    "DistributedCalibrationManager",
+    "CalibrationState",
+    "CalibrationEvent",
+    "CalibrationEventType",
+    "InMemoryMessageBroker",
+    "RedisMessageBroker",
+
+    # Observability and Debugging
+    "InstrumentedUncertaintyCalculator",
+    "UncertaintyProvenance",
+    "DebugLevel",
+    "PipelineStage",
+    "UncertaintyMetricsCollector",
+    "MetricsAggregator",
+    "AlertManager",
+    "AlertSeverity",
+    "UncertaintyDashboard",
+    "create_uncertainty_dashboard",
+    "create_standard_metrics_setup",
 
     # Compliance
     "ComplianceReporter",

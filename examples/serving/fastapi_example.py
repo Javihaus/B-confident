@@ -61,7 +61,7 @@ def create_custom_app() -> FastAPI:
         </head>
         <body>
             <div class="header">
-                <h1>🎯 PBA Uncertainty Quantification API</h1>
+                <h1>[TARGET] PBA Uncertainty Quantification API</h1>
                 <p>Enterprise-grade uncertainty quantification for Large Language Models</p>
                 <p><strong>Model:</strong> GPT-2 | <strong>Status:</strong> 🟢 Online</p>
             </div>
@@ -241,11 +241,11 @@ async def run_performance_test():
 def main():
     """Main function to run the FastAPI server"""
     if not FASTAPI_AVAILABLE:
-        print("❌ FastAPI not available. Install with:")
+        print("[ERROR] FastAPI not available. Install with:")
         print("pip install b-confident[serving]")
         return
 
-    print("🚀 Starting PBA Uncertainty API Server")
+    print("[DEPLOY] Starting PBA Uncertainty API Server")
     print("=" * 40)
 
     # Create the app
