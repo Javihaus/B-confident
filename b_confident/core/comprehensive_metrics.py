@@ -20,7 +20,9 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional, Union, Any
 from dataclasses import dataclass
 import scipy.stats as stats
-from scipy.special import entropy
+
+# Note: scipy.stats.entropy is not used in this module
+# EntropyUncertainty class implements its own entropy calculation using PyTorch
 import logging
 
 logger = logging.getLogger(__name__)
