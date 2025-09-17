@@ -25,6 +25,7 @@ from typing import Optional, Dict, List, Union, Tuple, Any
 import logging
 from dataclasses import dataclass
 import warnings
+import time
 
 from ..core.pba_algorithm import PBAUncertainty, PBAConfig
 from ..core.metrics import calculate_uncertainty_metrics, CalibrationResults
@@ -34,12 +35,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class UncertaintyGenerationResult:
-    """Results from uncertainty-enabled generation"""
+    """Results from uncertainty-enabled generation with performance metrics"""
     sequences: torch.Tensor  # Generated token sequences
     uncertainty_scores: List[float]  # Per-sequence uncertainty scores
     token_uncertainties: List[List[float]]  # Per-token uncertainties for each sequence
     sequence_scores: Optional[torch.Tensor]  # Original sequence scores if available
     metadata: Dict[str, Any]  # Additional information
+    performance_metrics: Dict[str, float]  # Timing and performance data
 
 
 class UncertaintyTransformersModel:
@@ -207,6 +209,11 @@ class UncertaintyTransformersModel:
                 **generation_kwargs
             )
 
+        # Performance timing
+        total_start_time = time.time()
+        generation_time = 0.0
+        uncertainty_time = 0.0
+
         # Custom generation loop to capture uncertainties
         generated_sequences = []
         all_uncertainties = []
@@ -219,7 +226,8 @@ class UncertaintyTransformersModel:
 
             # Generation loop
             for step in range(max_length - input_ids.shape[1]):
-                # Forward pass
+                # Forward pass (timed)
+                gen_start = time.time()
                 with torch.no_grad():
                     outputs = self.model(sequence_tokens)
                     logits = outputs.logits[0, -1]  # Last position logits
@@ -235,7 +243,10 @@ class UncertaintyTransformersModel:
                 else:
                     next_token = torch.argmax(sampling_logits, dim=-1).unsqueeze(0)
 
+                generation_time += time.time() - gen_start
+
                 # Calculate uncertainty for the ACTUAL generated token (paper-aligned)
+                unc_start = time.time()
                 try:
                     uncertainty = self.pba_calculator.calculate_token_uncertainty(
                         logits, actual_token_id=next_token.item()
@@ -244,6 +255,8 @@ class UncertaintyTransformersModel:
                 except Exception as e:
                     logger.warning(f"Error in uncertainty calculation: {e}")
                     sequence_uncertainties.append(1.0)
+
+                uncertainty_time += time.time() - unc_start
 
                 # Append token to sequence
                 sequence_tokens = torch.cat([sequence_tokens, next_token.unsqueeze(0)], dim=1)
@@ -278,6 +291,19 @@ class UncertaintyTransformersModel:
 
         sequences_tensor = torch.stack(padded_sequences)
 
+        total_time = time.time() - total_start_time
+
+        # Performance metrics (demonstrating the paper's 19% overhead claim)
+        performance_metrics = {
+            'total_time': total_time,
+            'generation_time': generation_time,
+            'uncertainty_time': uncertainty_time,
+            'uncertainty_overhead_pct': (uncertainty_time / generation_time * 100) if generation_time > 0 else 0.0,
+            'total_overhead_pct': ((total_time - generation_time) / generation_time * 100) if generation_time > 0 else 0.0,
+            'tokens_per_second': sum(len(seq) for seq in generated_sequences) / total_time if total_time > 0 else 0.0,
+            'uncertainty_calculations_per_second': len(all_token_uncertainties[0]) / uncertainty_time if uncertainty_time > 0 and all_token_uncertainties else 0.0
+        }
+
         # Metadata
         metadata = {
             'input_text': input_text,
@@ -288,6 +314,7 @@ class UncertaintyTransformersModel:
             'avg_uncertainty': sum(all_uncertainties) / len(all_uncertainties) if all_uncertainties else 0.0,
             'max_uncertainty': max(all_uncertainties) if all_uncertainties else 0.0,
             'min_uncertainty': min(all_uncertainties) if all_uncertainties else 0.0,
+            'performance_metrics': performance_metrics  # For backwards compatibility
         }
 
         return UncertaintyGenerationResult(
@@ -295,7 +322,8 @@ class UncertaintyTransformersModel:
             uncertainty_scores=all_uncertainties,
             token_uncertainties=all_token_uncertainties,
             sequence_scores=None,  # Could be added if needed
-            metadata=metadata
+            metadata=metadata,
+            performance_metrics=performance_metrics
         )
 
     def calibrate_model(

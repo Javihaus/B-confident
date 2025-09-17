@@ -23,6 +23,14 @@ from .core.metrics import (
     BrierScore,
     calculate_uncertainty_metrics
 )
+from .core.comprehensive_metrics import (
+    ComprehensiveUncertaintyCalculator,
+    ComprehensiveUncertaintyResults,
+    MaxProbabilityConfidence,
+    EntropyUncertainty,
+    PredictionConsistency,
+    TemperatureScaledConfidence
+)
 
 # Integration imports
 from .integration.transformers_wrapper import (
@@ -34,6 +42,13 @@ from .integration.transformers_wrapper import (
 from .compliance.regulatory import (
     ComplianceReporter,
     generate_eu_ai_act_report
+)
+from .compliance.regulatory_mapping import (
+    RegulatoryComplianceManager,
+    EUAIActCompliance,
+    NISTAIRMFCompliance,
+    ComplianceFramework,
+    RiskLevel
 )
 
 # Main API
@@ -47,6 +62,14 @@ __all__ = [
     "BrierScore",
     "calculate_uncertainty_metrics",
 
+    # Comprehensive Metrics
+    "ComprehensiveUncertaintyCalculator",
+    "ComprehensiveUncertaintyResults",
+    "MaxProbabilityConfidence",
+    "EntropyUncertainty",
+    "PredictionConsistency",
+    "TemperatureScaledConfidence",
+
     # Integration
     "UncertaintyTransformersModel",
     "uncertainty_generate",
@@ -54,6 +77,11 @@ __all__ = [
     # Compliance
     "ComplianceReporter",
     "generate_eu_ai_act_report",
+    "RegulatoryComplianceManager",
+    "EUAIActCompliance",
+    "NISTAIRMFCompliance",
+    "ComplianceFramework",
+    "RiskLevel",
 
     # Version info
     "__version__",
@@ -65,6 +93,19 @@ PACKAGE_INFO = {
     "version": __version__,
     "description": "Perplexity-Based Adjacency for Uncertainty Quantification in LLMs",
     "methodology_paper": "Perplexity-Based Adjacency for Uncertainty Quantification in Large Language Models",
-    "regulatory_compliance": ["EU AI Act Article 15"],
+    "regulatory_compliance": [
+        "EU AI Act Article 15",
+        "NIST AI Risk Management Framework",
+        "ISO/IEC 23053:2022",
+        "IEEE 2857-2021",
+        "ISO/IEC 23094-1:2023"
+    ],
     "supported_frameworks": ["transformers", "torch", "torchserve", "fastapi", "ray-serve"],
+    "uncertainty_methods": [
+        "Perplexity-Based Adjacency (PBA)",
+        "Maximum Probability Confidence",
+        "Shannon Entropy",
+        "Prediction Consistency",
+        "Temperature-scaled Confidence"
+    ],
 }

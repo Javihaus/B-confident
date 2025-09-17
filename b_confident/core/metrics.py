@@ -286,9 +286,17 @@ def calculate_uncertainty_metrics(
 
     # Calculate AUROC
     try:
-        auroc = roc_auc_score(correctness, confidences)
-    except ValueError:
-        # Handle case where all outcomes are the same
+        # Check if we have variance in the labels
+        if len(np.unique(correctness)) < 2:
+            # No discrimination possible - all labels are the same
+            auroc = 0.5
+        else:
+            # For uncertainty quantification, we want high uncertainty to predict errors
+            # So we predict error (1 - correctness) using uncertainty
+            error_labels = 1 - correctness
+            auroc = roc_auc_score(error_labels, uncertainties)
+    except ValueError as e:
+        logger.warning(f"AUROC calculation failed: {e}")
         auroc = 0.5
 
     # Calculate stability score (coefficient of variation)

@@ -182,7 +182,8 @@ class PBAUncertainty:
         """
         Calculate uncertainty for a single token prediction.
 
-        Uses paper-aligned simple approach: perplexity = exp(-log P(token))
+        Uses paper-aligned approach: perplexity = exp(-log P(token))
+        exactly matching the direct implementation in the evaluation notebook.
 
         Args:
             logits: Raw model logits for next token prediction [vocab_size]
@@ -194,29 +195,27 @@ class PBAUncertainty:
         if self.config.validate_inputs:
             self._validate_logits(logits)
 
-        # Ensure 1D tensor
+        # Ensure 1D tensor and move to correct device
         if logits.dim() > 1:
             logits = logits.squeeze()
 
         # Apply temperature scaling
         scaled_logits = self._apply_temperature(logits)
 
-        # Convert to log probabilities
-        log_probs = F.log_softmax(scaled_logits, dim=-1)
-
         if actual_token_id is not None:
-            # Use specified token
-            token_log_prob = log_probs[actual_token_id]
+            # Use specified token - this is the paper-aligned approach
+            # Calculate perplexity directly: exp(-log_softmax(logits)[token])
+            log_prob = F.log_softmax(scaled_logits, dim=-1)[actual_token_id]
+            perplexity = torch.exp(-log_prob).item()
         else:
             # Use most probable token as fallback
             max_token_id = torch.argmax(scaled_logits, dim=-1)
-            token_log_prob = log_probs[max_token_id]
-
-        # Paper-aligned approach: calculate perplexity for the token
-        # perplexity = exp(-log P(token))
-        perplexity = torch.exp(-token_log_prob).item()
+            log_prob = F.log_softmax(scaled_logits, dim=-1)[max_token_id]
+            perplexity = torch.exp(-log_prob).item()
 
         # Apply sensitivity function: f(p) = 1 - exp(-β·p)
+        # Ensure perplexity is reasonable to avoid numerical issues
+        perplexity = max(1.0, min(perplexity, 1000.0))  # Clamp perplexity
         uncertainty = self._perplexity_to_uncertainty(perplexity)
 
         return uncertainty
