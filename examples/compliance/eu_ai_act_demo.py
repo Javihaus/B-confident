@@ -132,7 +132,7 @@ def generate_eu_ai_act_compliance_report(calibration_results: Dict[str, Any]):
     """
     Generate comprehensive EU AI Act Article 15 compliance report.
     """
-    print("\n📋 Generating EU AI Act Article 15 Compliance Report")
+    print("\nGenerating EU AI Act Article 15 Compliance Report")
     print("=" * 60)
 
     from b_confident import compliance_report
@@ -196,7 +196,7 @@ def generate_eu_ai_act_compliance_report(calibration_results: Dict[str, Any]):
     print(f"   Confidence Reliability: {acc_declaration['confidence_reliability']}")
 
     if structured_report.compliance_notes:
-        print("\n⚠️  Compliance Notes:")
+        print("\n[WARNING] Compliance Notes:")
         for note in structured_report.compliance_notes:
             print(f"   - {note}")
 
@@ -354,7 +354,7 @@ def generate_executive_summary():
     """
     Generate executive summary for stakeholders.
     """
-    print("\n📋 Executive Summary for Stakeholders")
+    print("\nExecutive Summary for Stakeholders")
     print("=" * 45)
 
     summary = """

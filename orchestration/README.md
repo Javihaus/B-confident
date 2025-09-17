@@ -301,7 +301,7 @@ spec:
           value: "http://python-service:8000"
 ```
 
-## 🔍 Why TypeScript for Orchestration?
+## Why TypeScript for Orchestration?
 
 ### **Advantages Over Python-Only**
 1. **Type Safety**: Compile-time error prevention for distributed system coordination

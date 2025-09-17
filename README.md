@@ -365,10 +365,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-- 📖 **Documentation**: [docs.b-confident.com](https://docs.b-confident.com)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/javiermarin/b-confident/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/javiermarin/b-confident/discussions)
-- 📧 **Contact**: javier@jmarin.info
+- **Documentation**: [docs.b-confident.com](https://docs.b-confident.com)
+- **Issues**: [GitHub Issues](https://github.com/javiermarin/b-confident/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/javiermarin/b-confident/discussions)
+- **Contact**: javier@jmarin.info
 
 ---
 

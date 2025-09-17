@@ -103,8 +103,8 @@ def create_custom_app() -> FastAPI:
 
             <h2>Interactive Documentation</h2>
             <p>
-                📖 <a href="/docs">Swagger UI Documentation</a><br>
-                📋 <a href="/redoc">ReDoc Documentation</a>
+                <a href="/docs">Swagger UI Documentation</a><br>
+                <a href="/redoc">ReDoc Documentation</a>
             </p>
 
             <h2>Usage Examples</h2>
@@ -251,7 +251,7 @@ def main():
     # Create the app
     app = create_custom_app()
 
-    print("\n📋 Server Information:")
+    print("\nServer Information:")
     print(f"Model: GPT-2")
     print(f"PBA Configuration: α=0.9, β=0.5 (paper-optimized)")
     print(f"Monitoring: Enabled")
