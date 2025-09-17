@@ -23,6 +23,8 @@ from transformers import AutoModel, AutoTokenizer
 
 from ..core.pba_algorithm import PBAUncertainty, PBAConfig
 from ..integration.transformers_wrapper import UncertaintyTransformersModel
+from ..memory.streaming_processor import MemoryConfig
+from ..observability.uncertainty_debugger import InstrumentedUncertaintyCalculator, DebugLevel
 
 logger = logging.getLogger(__name__)
 

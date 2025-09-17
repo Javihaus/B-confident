@@ -27,6 +27,11 @@ from ..core.pba_algorithm import PBAUncertainty, PBAConfig
 from ..integration.transformers_wrapper import UncertaintyTransformersModel
 from ..compliance.calibration_tools import ContinuousCalibrationMonitor
 from ..compliance.regulatory import ComplianceReporter
+from ..memory.streaming_processor import StreamingUncertaintyProcessor, MemoryConfig
+from ..distributed.calibration_manager import DistributedCalibrationManager, InMemoryMessageBroker, RedisMessageBroker
+from ..observability.uncertainty_debugger import InstrumentedUncertaintyCalculator, DebugLevel
+from ..observability.metrics_collector import UncertaintyMetricsCollector, MetricsAggregator, AlertManager, create_standard_metrics_setup
+from ..observability.dashboard import UncertaintyDashboard, create_uncertainty_dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -77,26 +82,40 @@ class ComplianceReportResponse(BaseModel):
 
 class PBAAPIServer:
     """
-    FastAPI server for PBA uncertainty quantification.
+    Production-ready FastAPI server for PBA uncertainty quantification.
 
-    Provides production-ready REST API with monitoring, compliance reporting,
-    and resource management.
+    Provides comprehensive REST API with streaming memory management,
+    distributed calibration, observability, monitoring, and compliance reporting.
     """
 
     def __init__(
         self,
         model_name_or_path: str,
         pba_config: Optional[PBAConfig] = None,
+        memory_config: Optional[MemoryConfig] = None,
         enable_monitoring: bool = True,
+        enable_streaming: bool = True,
+        enable_distributed_calibration: bool = False,
+        enable_observability: bool = True,
+        debug_level: DebugLevel = DebugLevel.STANDARD,
+        node_id: Optional[str] = None,
+        redis_url: Optional[str] = None,
         cors_origins: Optional[List[str]] = None
     ):
         """
-        Initialize PBA API server.
+        Initialize production-ready PBA API server.
 
         Args:
             model_name_or_path: Hugging Face model identifier or local path
             pba_config: PBA configuration
+            memory_config: Memory management configuration
             enable_monitoring: Enable continuous calibration monitoring
+            enable_streaming: Enable streaming memory architecture
+            enable_distributed_calibration: Enable distributed calibration
+            enable_observability: Enable debugging and observability
+            debug_level: Observability debug level
+            node_id: Unique node identifier for distributed deployments
+            redis_url: Redis URL for distributed message broker
             cors_origins: CORS allowed origins
         """
         if not FASTAPI_AVAILABLE:
@@ -104,13 +123,20 @@ class PBAAPIServer:
 
         self.model_name = model_name_or_path
         self.pba_config = pba_config or PBAConfig()
+        self.memory_config = memory_config or MemoryConfig()
         self.enable_monitoring = enable_monitoring
+        self.enable_streaming = enable_streaming
+        self.enable_distributed_calibration = enable_distributed_calibration
+        self.enable_observability = enable_observability
+        self.debug_level = debug_level
+        self.node_id = node_id or f"api_node_{hash(model_name_or_path) % 10000}"
+        self.redis_url = redis_url
 
         # Initialize FastAPI app
         self.app = FastAPI(
-            title="PBA Uncertainty Quantification API",
-            description="REST API for Perplexity-Based Adjacency uncertainty quantification",
-            version="0.1.0",
+            title="B-Confident Uncertainty Quantification API",
+            description="Production-ready REST API for Perplexity-Based Adjacency uncertainty quantification with streaming memory, distributed calibration, and observability",
+            version="0.2.0",
             docs_url="/docs",
             redoc_url="/redoc"
         )
@@ -371,24 +397,61 @@ class PBAAPIServer:
 def create_uncertainty_api(
     model_name_or_path: str,
     pba_config: Optional[PBAConfig] = None,
+    memory_config: Optional[MemoryConfig] = None,
     enable_monitoring: bool = True,
+    enable_streaming: bool = True,
+    enable_distributed_calibration: bool = False,
+    enable_observability: bool = True,
+    debug_level: DebugLevel = DebugLevel.STANDARD,
+    node_id: Optional[str] = None,
+    redis_url: Optional[str] = None,
     cors_origins: Optional[List[str]] = None
 ) -> FastAPI:
     """
-    Create FastAPI application for PBA uncertainty quantification.
+    Create production-ready FastAPI application for PBA uncertainty quantification.
 
     Args:
         model_name_or_path: Hugging Face model identifier
         pba_config: PBA configuration
+        memory_config: Memory management configuration for high-throughput
         enable_monitoring: Enable continuous calibration monitoring
+        enable_streaming: Enable streaming memory architecture
+        enable_distributed_calibration: Enable distributed calibration across nodes
+        enable_observability: Enable debugging and observability framework
+        debug_level: Observability debug level
+        node_id: Unique node identifier for distributed deployments
+        redis_url: Redis URL for distributed message broker
         cors_origins: CORS allowed origins
 
     Returns:
-        FastAPI application ready for deployment
+        FastAPI application ready for production deployment
 
     Example:
+        >>> # Basic deployment
         >>> app = create_uncertainty_api("gpt2")
+
+        >>> # Production deployment with all features
+        >>> app = create_uncertainty_api(
+        ...     "gpt2",
+        ...     enable_streaming=True,
+        ...     enable_distributed_calibration=True,
+        ...     enable_observability=True,
+        ...     node_id="api_node_1",
+        ...     redis_url="redis://localhost:6379"
+        ... )
         >>> # Run with: uvicorn main:app --host 0.0.0.0 --port 8000
     """
-    server = PBAAPIServer(model_name_or_path, pba_config, enable_monitoring, cors_origins)
+    server = PBAAPIServer(
+        model_name_or_path=model_name_or_path,
+        pba_config=pba_config,
+        memory_config=memory_config,
+        enable_monitoring=enable_monitoring,
+        enable_streaming=enable_streaming,
+        enable_distributed_calibration=enable_distributed_calibration,
+        enable_observability=enable_observability,
+        debug_level=debug_level,
+        node_id=node_id,
+        redis_url=redis_url,
+        cors_origins=cors_origins
+    )
     return server.create_app()

@@ -29,7 +29,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/javiermarin/B-confident",
-    packages=find_packages(exclude=["tests*", "examples*", "docs*"]),
+    packages=find_packages(where="src", exclude=["tests*", "examples*", "docs*"]),
+    package_dir={"": "src"},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
