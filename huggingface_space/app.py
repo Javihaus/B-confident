@@ -162,10 +162,35 @@ class UncertaintyCalculator:
                 "processing_time": time.time() - start_time
             }
 
+    def calculate_baseline_generation(self, model, tokenizer, input_text, max_length=50):
+        """Calculate baseline generation time without uncertainty quantification"""
+        start_time = time.time()
+
+        inputs = tokenizer.encode(input_text, return_tensors="pt")
+
+        with torch.no_grad():
+            # Standard generation without uncertainty calculations
+            generated = model.generate(
+                inputs,
+                max_length=max_length,
+                num_return_sequences=1,
+                do_sample=False,
+                pad_token_id=tokenizer.eos_token_id
+            )
+
+            generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
+
+        baseline_time = time.time() - start_time
+
+        return {
+            "generated_text": generated_text,
+            "processing_time": baseline_time
+        }
+
     def compare_uncertainty_methods(self, model_name, input_text, max_length=50):
         """
-        Main comparison function: PBA vs Direct implementation
-        Returns comprehensive metrics and timing comparison
+        Main comparison function: Baseline vs PBA vs Direct implementation
+        Returns comprehensive metrics, timing, and overhead comparison
         """
 
         results = {
@@ -174,13 +199,18 @@ class UncertaintyCalculator:
         }
 
         try:
-            # Load model for direct calculation
+            # Load model for all calculations
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
 
             model = AutoModelForCausalLM.from_pretrained(model_name)
             model.eval()
+
+            # Calculate Baseline (standard generation without uncertainty)
+            baseline_results = self.calculate_baseline_generation(
+                model, tokenizer, input_text, max_length
+            )
 
             # Calculate Direct Implementation metrics
             direct_results = self.calculate_direct_uncertainty_metrics(
@@ -192,11 +222,19 @@ class UncertaintyCalculator:
                 model_name, input_text, max_length
             )
 
+            # Calculate real computational overhead
+            baseline_time = baseline_results["processing_time"]
+            direct_overhead = ((direct_results["processing_time"] - baseline_time) / baseline_time) * 100
+            pba_overhead = ((pba_results["processing_time"] - baseline_time) / baseline_time) * 100
+
             # Combine results
             results.update({
+                "baseline": baseline_results,
                 "direct": direct_results,
                 "pba": pba_results,
-                "time_improvement": max(0, direct_results["processing_time"] - pba_results["processing_time"]),
+                "direct_overhead": direct_overhead,
+                "pba_overhead": pba_overhead,
+                "overhead_comparison": pba_overhead - direct_overhead,  # Positive means PBA is slower, negative means faster
                 "success": True
             })
 
@@ -225,59 +263,84 @@ def uncertainty_calculation_interface(model_name, input_text, max_length):
         return "Error: " + results.get("error", "Unknown error"), None
 
     # Format results for display
+    baseline = results["baseline"]
     direct = results["direct"]
     pba = results["pba"]
 
-    # Create comparison table
+    # Calculate percentage comparisons
+    def format_comparison(pba_val, direct_val):
+        if isinstance(pba_val, str) or isinstance(direct_val, str):
+            return "N/A"
+        if direct_val == 0:
+            return "N/A"
+        change = ((pba_val - direct_val) / direct_val) * 100
+        if change > 0:
+            return "+" + str(round(change, 1)) + "%"
+        else:
+            return str(round(change, 1)) + "%"
+
+    # Create three-column comparison table
     comparison_data = {
         "Metric": [
             "Generated Text",
             "Processing Time (seconds)",
+            "Computational Overhead (%)",
             "Maximum Probability Confidence",
             "Entropy-based Uncertainty",
             "PBA Uncertainty Score",
             "Prediction Consistency"
         ],
         "Direct Implementation": [
-            direct["generated_text"][:50] + "..." if len(direct["generated_text"]) > 50 else direct["generated_text"],
+            direct["generated_text"][:40] + "..." if len(direct["generated_text"]) > 40 else direct["generated_text"],
             str(round(direct["processing_time"], 4)),
+            str(round(results["direct_overhead"], 1)) + "%",
             str(round(direct["max_prob_confidence"], 3)),
             str(round(direct["entropy_uncertainty"], 3)),
-            "N/A",
+            "N/A (separate calculations)",
             str(round(direct["consistency_score"], 3))
         ],
         "PBA Implementation": [
-            pba["generated_text"][:50] + "..." if len(pba["generated_text"]) > 50 else pba["generated_text"],
+            pba["generated_text"][:40] + "..." if len(pba["generated_text"]) > 40 else pba["generated_text"],
             str(round(pba["processing_time"], 4)),
-            "Integrated",
-            "Integrated",
+            str(round(results["pba_overhead"], 1)) + "%",
+            "Integrated in PBA score",
+            "Integrated in PBA score",
             str(round(pba["pba_uncertainty"], 3)),
-            "Integrated"
+            "Integrated in PBA score"
+        ],
+        "Comparison (PBA vs Direct)": [
+            "Same generation quality",
+            format_comparison(pba["processing_time"], direct["processing_time"]),
+            str(round(results["overhead_comparison"], 1)) + "% difference",
+            "Unified uncertainty measure",
+            "Single calculation vs separate",
+            "Calibrated uncertainty score",
+            "Integrated vs separate metric"
         ]
     }
 
     df = pd.DataFrame(comparison_data)
 
-    # Performance summary
-    time_saved = results["time_improvement"]
+    # Performance summary with real overhead calculations
     performance_summary = """
-## Performance Analysis
+## Computational Overhead Analysis
 
-**Time Comparison:**
-- Direct Implementation: """ + str(round(direct["processing_time"], 4)) + """ seconds
-- PBA Implementation: """ + str(round(pba["processing_time"], 4)) + """ seconds
-- Time Difference: """ + str(round(time_saved, 4)) + """ seconds
+**Baseline Generation Time:** """ + str(round(baseline["processing_time"], 4)) + """ seconds (standard generation without uncertainty)
 
-**Key Benefits:**
-- PBA integrates multiple uncertainty measures in a single pass
-- Eliminates need for separate entropy calculations
-- Provides calibrated uncertainty scores for regulatory compliance
-- Reduces computational complexity vs ensemble methods
+**Real Computational Overhead:**
+- Direct Implementation: """ + str(round(results["direct_overhead"], 1)) + """% overhead
+- PBA Implementation: """ + str(round(results["pba_overhead"], 1)) + """% overhead
+- **Overhead Difference:** """ + str(round(results["overhead_comparison"], 1)) + """% (""" + ("PBA is more efficient" if results["overhead_comparison"] < 0 else "Direct is more efficient") + """)
 
-**Uncertainty Insights:**
+**Key Insights:**
+- **Processing Time Comparison:** """ + format_comparison(pba["processing_time"], direct["processing_time"]) + """ change from Direct to PBA
+- **Integration Benefit:** PBA provides unified uncertainty measure vs separate calculations
+- **Real Performance:** Measured against actual baseline generation time
+
+**Uncertainty Scores:**
 - Maximum Probability: """ + str(round(direct["max_prob_confidence"], 3)) + """ (higher = more confident)
 - Entropy Uncertainty: """ + str(round(direct["entropy_uncertainty"], 3)) + """ (lower = more confident)
-- PBA Uncertainty: """ + str(round(pba["pba_uncertainty"], 3)) + """ (lower = more confident)
+- PBA Uncertainty: """ + str(round(pba["pba_uncertainty"], 3)) + """ (lower = more confident, integrated measure)
     """
 
     return performance_summary, df
