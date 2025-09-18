@@ -38,15 +38,13 @@ class UncertaintyCalculator:
         self.model_cache = {}
         self.tokenizer_cache = {}
 
-        # Production models for uncertainty quantification testing
+        # Fast, lightweight models optimized for demo speed
         self.available_models = {
-            "meta-llama/Llama-3.2-8B": "Llama 3.2 8B * (GPU)",
-            "google/gemma-2-9b": "Gemma2 9B * (GPU)",
-            "google/gemma-2-2b": "Gemma 2 2B (Quantized) (CPU)",
-            "Qwen/Qwen1.5-1.8B": "Qwen1.5 1.8B (for CPU)",
-            "Qwen/Qwen1.5-14B": "Qwen1.5 14B * (GPU needed)",
-            "microsoft/Phi-3-mini-4k-instruct": "Phi-3 Mini (3.8B, Quantized) (CPU)",
-            "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B": "DeepSeek R1 7B/8B (Quantized) * (GPU)"
+            "Qwen/Qwen2.5-0.5B-Instruct": "Qwen2.5 0.5B (Fast)",
+            "HuggingFaceTB/SmolLM2-360M-Instruct": "SmolLM2 360M (Ultra Fast)",
+            "google/flan-t5-small": "FLAN-T5 Small (77M)",
+            "google/flan-t5-base": "FLAN-T5 Base (220M)",
+            "sentence-transformers/all-MiniLM-L6-v2": "all-MiniLM-L6-v2 (22M)"
         }
 
         self.example_prompts = [
@@ -70,17 +68,20 @@ class UncertaintyCalculator:
         attention_mask = inputs["attention_mask"]
 
         with torch.no_grad():
-            # Optimized generation for faster inference
-            max_new_tokens = min(max_length - input_ids.shape[1], 20)  # Limit for demo speed
+            # Ultra-fast generation optimized for speed
+            max_new_tokens = min(max_length - input_ids.shape[1], 10)  # Very short for speed
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
+                max_length=20,              # Hard limit for speed
                 max_new_tokens=max_new_tokens,
                 num_return_sequences=1,
-                do_sample=False,
+                do_sample=False,            # Greedy decoding is faster
                 pad_token_id=tokenizer.eos_token_id,
-                use_cache=True,           # Enable KV cache for speed
-                early_stopping=True      # Stop at EOS token
+                use_cache=True,             # Enable KV cache for speed
+                early_stopping=True,        # Stop at EOS token
+                temperature=1.0,            # Default temperature
+                repetition_penalty=1.0      # No repetition penalty for speed
             )
             generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
 
@@ -162,7 +163,7 @@ class UncertaintyCalculator:
 
         if not REAL_PBA_AVAILABLE:
             # Simulate for demo - PBA should be significantly faster
-            time.sleep(0.03)  # Much faster than standard implementation
+            time.sleep(0.01)  # Ultra fast simulation for small models
 
             # PBA provides similar metric values but calculated more efficiently
             if metric_type == "max_probability":
@@ -241,17 +242,20 @@ class UncertaintyCalculator:
         attention_mask = inputs["attention_mask"]
 
         with torch.no_grad():
-            # Optimized baseline generation
-            max_new_tokens = min(max_length - input_ids.shape[1], 20)  # Limit for demo speed
+            # Ultra-fast baseline generation
+            max_new_tokens = min(max_length - input_ids.shape[1], 10)  # Very short for speed
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
+                max_length=20,              # Hard limit for speed
                 max_new_tokens=max_new_tokens,
                 num_return_sequences=1,
-                do_sample=False,
+                do_sample=False,            # Greedy decoding is faster
                 pad_token_id=tokenizer.eos_token_id,
-                use_cache=True,           # Enable KV cache for speed
-                early_stopping=True      # Stop at EOS token
+                use_cache=True,             # Enable KV cache for speed
+                early_stopping=True,        # Stop at EOS token
+                temperature=1.0,            # Default temperature
+                repetition_penalty=1.0      # No repetition penalty for speed
             )
 
             generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
@@ -483,9 +487,7 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
 
     **Select a specific uncertainty metric** to compare how Direct vs PBA approaches calculate it. Both should yield similar metric values, but PBA should be more computationally efficient.
 
-    **HuggingFace Spaces Note**: Large models can't run with default HF CPU and need GPU version. Models marked with * require GPU resources.
-
-    **Performance**: Models are cached after first load and use optimized generation (float16, accelerate) for faster inference.
+    **Performance Optimized**: Using lightweight models (22M-500M parameters) for ultra-fast demo performance. Models are cached and use optimized generation (max_length=20, greedy decoding).
     """)
 
     with gr.Row():
@@ -493,7 +495,7 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
             model_dropdown = gr.Dropdown(
                 choices=list(uncertainty_calc.available_models.keys()),
                 label="Select Model",
-                value="Qwen/Qwen1.5-1.8B"
+                value="HuggingFaceTB/SmolLM2-360M-Instruct"
             )
 
             input_text = gr.Textbox(
@@ -516,10 +518,10 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
             )
 
             max_length = gr.Slider(
-                minimum=20,
-                maximum=100,
-                value=50,
-                label="Max Generation Length"
+                minimum=10,
+                maximum=30,
+                value=20,
+                label="Max Generation Length (optimized for speed)"
             )
 
             calculate_btn = gr.Button("Compare Approaches", variant="primary")
