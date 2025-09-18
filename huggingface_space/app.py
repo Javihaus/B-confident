@@ -34,36 +34,28 @@ class UncertaintyCalculator:
     """Focused uncertainty calculation with PBA vs Direct comparison"""
 
     def __init__(self):
-        # Production-ready models for realistic testing
+        # Models organized by size - HuggingFace Space optimized
         self.available_models = {
-            # Small models for quick testing
-            "gpt2": "GPT-2 (117M)",
-            "distilgpt2": "DistilGPT-2 (82M)",
+            # Small models (recommended for HuggingFace Spaces)
+            "gpt2": "GPT-2 (117M) - Recommended",
+            "distilgpt2": "DistilGPT-2 (82M) - Fast",
             "microsoft/DialoGPT-small": "DialoGPT Small (117M)",
-
-            # Medium models
-            "microsoft/DialoGPT-medium": "DialoGPT Medium (345M)",
             "EleutherAI/gpt-neo-125M": "GPT-Neo 125M",
-            "EleutherAI/gpt-neo-1.3B": "GPT-Neo 1.3B",
-            "facebook/opt-350m": "OPT 350M",
-            "facebook/opt-1.3b": "OPT 1.3B",
-            "google/flan-t5-base": "Flan-T5 Base (220M)",
-            "google/flan-t5-large": "Flan-T5 Large (770M)",
 
-            # Large models (~10B+ parameters) - Production scale
-            "meta-llama/Llama-2-7b-hf": "Llama 2 7B",
-            "meta-llama/Llama-2-13b-hf": "Llama 2 13B",
-            "google/gemma-2b": "Gemma 2B",
-            "google/gemma-7b": "Gemma 7B",
-            "mistralai/Mixtral-8x7B-Instruct-v0.1": "Mixtral 8x7B",
-            "mistralai/Mixtral-8x22B-Instruct-v0.1": "Mixtral 8x22B",
-            "tiiuae/falcon-7b": "Falcon 7B",
-            "tiiuae/falcon-40b": "Falcon 40B",
-            "Qwen/Qwen2-7B": "Qwen 2 7B",
-            "Qwen/Qwen2-72B": "Qwen 2 72B",
-            "EleutherAI/gpt-neox-20b": "GPT-NeoX 20B",
-            "deepseek-ai/deepseek-llm-7b-base": "DeepSeek LLM 7B",
-            "deepseek-ai/deepseek-coder-6.7b-base": "DeepSeek Coder 6.7B"
+            # Medium models (may work on HuggingFace Spaces)
+            "microsoft/DialoGPT-medium": "DialoGPT Medium (345M)",
+            "facebook/opt-350m": "OPT 350M",
+            "google/flan-t5-base": "Flan-T5 Base (220M)",
+
+            # Large models (may require more resources)
+            "EleutherAI/gpt-neo-1.3B": "GPT-Neo 1.3B - May timeout",
+            "facebook/opt-1.3b": "OPT 1.3B - May timeout",
+            "google/flan-t5-large": "Flan-T5 Large (770M) - May timeout",
+
+            # Very large models (for reference - likely to fail in Spaces)
+            "google/gemma-2b": "Gemma 2B - Resource intensive",
+            "tiiuae/falcon-7b": "Falcon 7B - Resource intensive",
+            "meta-llama/Llama-2-7b-hf": "Llama 2 7B - Resource intensive"
         }
 
         self.example_prompts = [
@@ -200,11 +192,18 @@ class UncertaintyCalculator:
 
         try:
             # Load model for all calculations
+            logger.info("Loading model: " + model_name)
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
 
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            # Try to load model with error handling for large models
+            try:
+                model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
+            except Exception as model_error:
+                logger.warning("Failed to load model with auto device mapping: " + str(model_error))
+                model = AutoModelForCausalLM.from_pretrained(model_name)
+
             model.eval()
 
             # Calculate Baseline (standard generation without uncertainty)
@@ -358,14 +357,16 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
     **Compare PBA vs Direct Implementation** - See performance improvements and integrated uncertainty metrics in action.
 
     This demo shows the core value: **PBA provides comprehensive uncertainty quantification in a single forward pass**, eliminating separate calculations for confidence, entropy, and calibration metrics.
+
+    ⚠️ **HuggingFace Spaces Note**: Large models (>1B parameters) may fail due to memory constraints. Use smaller models like DistilGPT-2 or GPT-2 for reliable testing.
     """)
 
     with gr.Row():
         with gr.Column():
             model_dropdown = gr.Dropdown(
                 choices=list(uncertainty_calc.available_models.keys()),
-                label="Select Model",
-                value="gpt2"
+                label="Select Model (smaller models work better in HuggingFace Spaces)",
+                value="distilgpt2"
             )
 
             input_text = gr.Textbox(
