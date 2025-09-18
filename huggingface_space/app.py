@@ -46,11 +46,10 @@ class UncertaintyCalculator:
 
         # Fast, lightweight models optimized for demo speed
         self.available_models = {
-            "Qwen/Qwen2.5-0.5B-Instruct": "Qwen2.5 0.5B (Fast)",
             "HuggingFaceTB/SmolLM2-360M-Instruct": "SmolLM2 360M (Ultra Fast)",
-            "google/flan-t5-small": "FLAN-T5 Small (77M)",
-            "google/flan-t5-base": "FLAN-T5 Base (220M)",
-            "sentence-transformers/all-MiniLM-L6-v2": "all-MiniLM-L6-v2 (22M)"
+            "microsoft/DialoGPT-small": "DialoGPT Small (117M)",
+            "gpt2": "GPT-2 (124M)",
+            "distilgpt2": "DistilGPT-2 (82M)"
         }
 
         self.example_prompts = [
@@ -75,19 +74,19 @@ class UncertaintyCalculator:
 
         with torch.no_grad():
             # Ultra-fast generation optimized for speed
-            max_new_tokens = min(max_length - input_ids.shape[1], 10)  # Very short for speed
+            max_new_tokens = min(10, max_length - input_ids.shape[1])  # Very short for speed
+            if max_new_tokens <= 0:
+                max_new_tokens = 5  # Minimum generation
+
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_length=20,              # Hard limit for speed
-                max_new_tokens=max_new_tokens,
+                max_new_tokens=max_new_tokens,  # Only use max_new_tokens
                 num_return_sequences=1,
                 do_sample=False,            # Greedy decoding is faster
                 pad_token_id=tokenizer.eos_token_id,
                 use_cache=True,             # Enable KV cache for speed
-                early_stopping=True,        # Stop at EOS token
-                temperature=1.0,            # Default temperature
-                repetition_penalty=1.0      # No repetition penalty for speed
+                early_stopping=True         # Stop at EOS token
             )
             generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
 
@@ -122,35 +121,54 @@ class UncertaintyCalculator:
             logger.info("Extracted logits shape: " + str(logits.shape))
             hidden_states = outputs.hidden_states[-1] if hasattr(outputs, 'hidden_states') else None
 
-            if metric_type == "max_probability":
-                # Traditional max probability calculation (expensive softmax operations)
-                probabilities = torch.softmax(logits, dim=-1)
-                metric_value = torch.max(probabilities).item()
+            try:
+                if metric_type == "max_probability":
+                    # Traditional max probability calculation (expensive softmax operations)
+                    logger.info("Calculating max_probability metric")
+                    probabilities = torch.softmax(logits, dim=-1)
+                    logger.info("Softmax calculated, probabilities shape: " + str(probabilities.shape))
+                    metric_value = torch.max(probabilities).item()
+                    logger.info("Max probability calculated: " + str(metric_value))
 
-            elif metric_type == "entropy":
-                # Traditional entropy calculation (expensive log operations)
-                probabilities = torch.softmax(logits, dim=-1)
-                entropy = -torch.sum(probabilities * torch.log(probabilities + 1e-8)).item()
-                metric_value = entropy / np.log(len(probabilities))
+                elif metric_type == "entropy":
+                    # Traditional entropy calculation (expensive log operations)
+                    logger.info("Calculating entropy metric")
+                    probabilities = torch.softmax(logits, dim=-1)
+                    logger.info("Softmax calculated, probabilities shape: " + str(probabilities.shape))
+                    entropy = -torch.sum(probabilities * torch.log(probabilities + 1e-8)).item()
+                    logger.info("Entropy sum calculated: " + str(entropy))
+                    metric_value = entropy / np.log(len(probabilities))
+                    logger.info("Normalized entropy calculated: " + str(metric_value))
 
-            elif metric_type == "ece":
-                # Traditional ECE calculation (expensive probability computations)
-                probabilities = torch.softmax(logits, dim=-1)
-                max_prob = torch.max(probabilities).item()
-                metric_value = abs(max_prob - 0.8)  # Simplified for demo
+                elif metric_type == "ece":
+                    # Traditional ECE calculation (expensive probability computations)
+                    logger.info("Calculating ECE metric")
+                    probabilities = torch.softmax(logits, dim=-1)
+                    max_prob = torch.max(probabilities).item()
+                    metric_value = abs(max_prob - 0.8)  # Simplified for demo
+                    logger.info("ECE calculated: " + str(metric_value))
 
-            elif metric_type == "brier_score":
-                # Traditional Brier Score calculation
-                probabilities = torch.softmax(logits, dim=-1)
-                max_prob = torch.max(probabilities).item()
-                metric_value = (max_prob - 0.9) ** 2  # Simplified for demo
+                elif metric_type == "brier_score":
+                    # Traditional Brier Score calculation
+                    logger.info("Calculating Brier score metric")
+                    probabilities = torch.softmax(logits, dim=-1)
+                    max_prob = torch.max(probabilities).item()
+                    metric_value = (max_prob - 0.9) ** 2  # Simplified for demo
+                    logger.info("Brier score calculated: " + str(metric_value))
 
-            elif metric_type == "auroc":
-                # Traditional AUROC calculation approach
-                metric_value = 0.75  # Standard approach result
+                elif metric_type == "auroc":
+                    # Traditional AUROC calculation approach
+                    logger.info("Calculating AUROC metric")
+                    metric_value = 0.75  # Standard approach result
+                    logger.info("AUROC calculated: " + str(metric_value))
 
-            else:
-                metric_value = 0.5
+                else:
+                    logger.info("Unknown metric type, using default")
+                    metric_value = 0.5
+
+            except Exception as metric_error:
+                logger.error("Error in metric calculation: " + str(metric_error))
+                raise Exception("Metric calculation failed: " + str(metric_error))
 
         standard_time = time.time() - start_time
 
@@ -249,19 +267,19 @@ class UncertaintyCalculator:
 
         with torch.no_grad():
             # Ultra-fast baseline generation
-            max_new_tokens = min(max_length - input_ids.shape[1], 10)  # Very short for speed
+            max_new_tokens = min(10, max_length - input_ids.shape[1])  # Very short for speed
+            if max_new_tokens <= 0:
+                max_new_tokens = 5  # Minimum generation
+
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_length=20,              # Hard limit for speed
-                max_new_tokens=max_new_tokens,
+                max_new_tokens=max_new_tokens,  # Only use max_new_tokens
                 num_return_sequences=1,
                 do_sample=False,            # Greedy decoding is faster
                 pad_token_id=tokenizer.eos_token_id,
                 use_cache=True,             # Enable KV cache for speed
-                early_stopping=True,        # Stop at EOS token
-                temperature=1.0,            # Default temperature
-                repetition_penalty=1.0      # No repetition penalty for speed
+                early_stopping=True         # Stop at EOS token
             )
 
             generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
@@ -406,7 +424,7 @@ def load_model_cached(model_name: str):
 # Pre-load popular models at startup for instant access
 PRELOAD_MODELS = [
     "HuggingFaceTB/SmolLM2-360M-Instruct",  # Default - ultra fast
-    "google/flan-t5-small",                  # Very fast backup
+    "gpt2",                                  # Very fast backup
 ]
 
 logger.info("Pre-loading popular models for instant startup...")
