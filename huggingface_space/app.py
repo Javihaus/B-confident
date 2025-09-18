@@ -4,6 +4,13 @@ B-Confident HuggingFace Space - Focused Uncertainty Calculation Demo
 Real comparison of PBA vs Direct implementation with performance metrics
 """
 
+import os
+# Optimize HuggingFace caching for faster model loading
+os.environ["HF_HOME"] = "/tmp/hf_cache"
+os.environ["TRANSFORMERS_CACHE"] = "/tmp/hf_cache"
+os.environ["HF_DATASETS_CACHE"] = "/tmp/hf_cache"
+os.environ["HF_HUB_CACHE"] = "/tmp/hf_cache"
+
 import gradio as gr
 import torch
 import numpy as np
@@ -12,6 +19,7 @@ import logging
 from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM, pipeline
 from typing import Dict, List, Tuple
 import pandas as pd
+from functools import lru_cache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,9 +42,7 @@ class UncertaintyCalculator:
     """Focused uncertainty calculation with PBA vs Direct comparison"""
 
     def __init__(self):
-        # Model caching for faster subsequent runs
-        self.model_cache = {}
-        self.tokenizer_cache = {}
+        # Using global model cache for optimal performance
 
         # Fast, lightweight models optimized for demo speed
         self.available_models = {
@@ -281,48 +287,8 @@ class UncertaintyCalculator:
         }
 
         try:
-            # Check cache first for faster subsequent runs
-            if model_name in self.model_cache:
-                logger.info("Using cached model: " + model_name)
-                model = self.model_cache[model_name]
-                tokenizer = self.tokenizer_cache[model_name]
-            else:
-                # Load model for standard calculations
-                logger.info("Loading model: " + model_name)
-                tokenizer = AutoTokenizer.from_pretrained(model_name)
-                if tokenizer.pad_token is None:
-                    tokenizer.pad_token = tokenizer.eos_token
-
-                # Optimized model loading for faster performance
-            try:
-                model = AutoModelForCausalLM.from_pretrained(
-                    model_name,
-                    torch_dtype=torch.float16,  # Use float16 for speed
-                    device_map="auto",          # Automatic device placement
-                    low_cpu_mem_usage=True,     # Reduce CPU memory usage
-                    trust_remote_code=True      # Allow custom model code
-                )
-                logger.info("Model loaded with accelerate optimizations")
-            except Exception as model_error:
-                logger.warning("Failed to load model with accelerate optimizations: " + str(model_error))
-                try:
-                    model = AutoModelForCausalLM.from_pretrained(
-                        model_name,
-                        torch_dtype=torch.float16,
-                        low_cpu_mem_usage=True
-                    )
-                    logger.info("Model loaded with float16 optimization")
-                except Exception as fallback_error:
-                    logger.warning("Failed to load with optimizations: " + str(fallback_error))
-                    model = AutoModelForCausalLM.from_pretrained(model_name)
-                    logger.info("Model loaded with default settings")
-
-                model.eval()
-
-                # Cache the model and tokenizer for faster subsequent runs
-                self.model_cache[model_name] = model
-                self.tokenizer_cache[model_name] = tokenizer
-                logger.info("Model cached for future use")
+            # Use global cached model for instant access
+            model, tokenizer = load_model_cached(model_name)
 
             # Calculate Standard/Traditional approach (baseline)
             try:
@@ -374,6 +340,84 @@ class UncertaintyCalculator:
             })
 
         return results
+
+# Global model cache for ultra-fast access
+GLOBAL_MODEL_CACHE = {}
+GLOBAL_TOKENIZER_CACHE = {}
+
+@lru_cache(maxsize=10)
+def load_model_cached(model_name: str):
+    """
+    Pre-load and cache models globally for instant access
+    Uses LRU cache to maintain up to 10 models in memory
+    """
+    if model_name in GLOBAL_MODEL_CACHE:
+        logger.info("Using global cached model: " + model_name)
+        return GLOBAL_MODEL_CACHE[model_name], GLOBAL_TOKENIZER_CACHE[model_name]
+
+    logger.info("Loading and caching model globally: " + model_name)
+
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        cache_dir="/tmp/hf_cache",
+        local_files_only=False
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # Load model with optimizations
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            low_cpu_mem_usage=True,
+            trust_remote_code=True,
+            cache_dir="/tmp/hf_cache"
+        )
+        logger.info("Model loaded with accelerate optimizations: " + model_name)
+    except Exception as e:
+        logger.warning("Accelerate failed, using fallback: " + str(e))
+        try:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True,
+                cache_dir="/tmp/hf_cache"
+            )
+            logger.info("Model loaded with float16: " + model_name)
+        except Exception as e2:
+            logger.warning("Float16 failed, using default: " + str(e2))
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                cache_dir="/tmp/hf_cache"
+            )
+            logger.info("Model loaded with defaults: " + model_name)
+
+    model.eval()
+
+    # Cache globally
+    GLOBAL_MODEL_CACHE[model_name] = model
+    GLOBAL_TOKENIZER_CACHE[model_name] = tokenizer
+
+    return model, tokenizer
+
+# Pre-load popular models at startup for instant access
+PRELOAD_MODELS = [
+    "HuggingFaceTB/SmolLM2-360M-Instruct",  # Default - ultra fast
+    "google/flan-t5-small",                  # Very fast backup
+]
+
+logger.info("Pre-loading popular models for instant startup...")
+for model_name in PRELOAD_MODELS:
+    try:
+        _, _ = load_model_cached(model_name)
+        logger.info("Pre-loaded successfully: " + model_name)
+    except Exception as e:
+        logger.warning("Pre-loading failed for " + model_name + ": " + str(e))
+
+DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"
 
 # Initialize calculator
 uncertainty_calc = UncertaintyCalculator()
@@ -487,7 +531,7 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
 
     **Select a specific uncertainty metric** to compare how Direct vs PBA approaches calculate it. Both should yield similar metric values, but PBA should be more computationally efficient.
 
-    **Performance Optimized**: Using lightweight models (22M-500M parameters) for ultra-fast demo performance. Models are cached and use optimized generation (max_length=20, greedy decoding).
+    **Performance Optimized**: Using lightweight models (22M-500M parameters) for ultra-fast demo performance. Popular models are pre-loaded at startup for instant access. All models use persistent caching and optimized generation (max_length=20, greedy decoding).
     """)
 
     with gr.Row():
