@@ -34,28 +34,15 @@ class UncertaintyCalculator:
     """Focused uncertainty calculation with PBA vs Direct comparison"""
 
     def __init__(self):
-        # Models organized by size - HuggingFace Space optimized
+        # Production models for uncertainty quantification testing
         self.available_models = {
-            # Small models (recommended for HuggingFace Spaces)
-            "gpt2": "GPT-2 (117M) - Recommended",
-            "distilgpt2": "DistilGPT-2 (82M) - Fast",
-            "microsoft/DialoGPT-small": "DialoGPT Small (117M)",
-            "EleutherAI/gpt-neo-125M": "GPT-Neo 125M",
-
-            # Medium models (may work on HuggingFace Spaces)
-            "microsoft/DialoGPT-medium": "DialoGPT Medium (345M)",
-            "facebook/opt-350m": "OPT 350M",
-            "google/flan-t5-base": "Flan-T5 Base (220M)",
-
-            # Large models (may require more resources)
-            "EleutherAI/gpt-neo-1.3B": "GPT-Neo 1.3B - May timeout",
-            "facebook/opt-1.3b": "OPT 1.3B - May timeout",
-            "google/flan-t5-large": "Flan-T5 Large (770M) - May timeout",
-
-            # Very large models (for reference - likely to fail in Spaces)
-            "google/gemma-2b": "Gemma 2B - Resource intensive",
-            "tiiuae/falcon-7b": "Falcon 7B - Resource intensive",
-            "meta-llama/Llama-2-7b-hf": "Llama 2 7B - Resource intensive"
+            "meta-llama/Llama-3.2-8B": "Llama 3.2 8B * (GPU)",
+            "google/gemma-2-9b": "Gemma2 9B * (GPU)",
+            "google/gemma-2-2b": "Gemma 2 2B (Quantized) (CPU)",
+            "Qwen/Qwen1.5-1.8B": "Qwen1.5 1.8B (for CPU)",
+            "Qwen/Qwen1.5-14B": "Qwen1.5 14B * (GPU needed)",
+            "microsoft/Phi-3-mini-4k-instruct": "Phi-3 Mini (3.8B, Quantized) (CPU)",
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B": "DeepSeek R1 7B/8B (Quantized) * (GPU)"
         }
 
         self.example_prompts = [
@@ -358,15 +345,15 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
 
     This demo shows the core value: **PBA provides comprehensive uncertainty quantification in a single forward pass**, eliminating separate calculations for confidence, entropy, and calibration metrics.
 
-    ⚠️ **HuggingFace Spaces Note**: Large models (>1B parameters) may fail due to memory constraints. Use smaller models like DistilGPT-2 or GPT-2 for reliable testing.
+    **HuggingFace Spaces Note**: Large models can't run with default HF CPU and need GPU version. Models marked with * require GPU resources.
     """)
 
     with gr.Row():
         with gr.Column():
             model_dropdown = gr.Dropdown(
                 choices=list(uncertainty_calc.available_models.keys()),
-                label="Select Model (smaller models work better in HuggingFace Spaces)",
-                value="distilgpt2"
+                label="Select Model",
+                value="Qwen/Qwen1.5-1.8B"
             )
 
             input_text = gr.Textbox(
