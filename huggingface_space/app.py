@@ -60,13 +60,16 @@ class UncertaintyCalculator:
         """
         start_time = time.time()
 
-        # Encode input
-        inputs = tokenizer.encode(input_text, return_tensors="pt")
+        # Encode input with attention mask
+        inputs = tokenizer(input_text, return_tensors="pt", padding=True, truncation=True)
+        input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
 
         with torch.no_grad():
             # Generate text first
             generated = model.generate(
-                inputs,
+                input_ids,
+                attention_mask=attention_mask,
                 max_length=max_length,
                 num_return_sequences=1,
                 do_sample=False,
@@ -76,7 +79,7 @@ class UncertaintyCalculator:
 
             # Standard/Traditional calculation approach (expensive)
             # Shared forward pass
-            outputs = model(inputs)
+            outputs = model(input_ids, attention_mask=attention_mask)
             logits = outputs.logits[0, -1, :]
             hidden_states = outputs.hidden_states[-1] if hasattr(outputs, 'hidden_states') else None
 
@@ -200,12 +203,16 @@ class UncertaintyCalculator:
         """Calculate baseline generation time without uncertainty quantification"""
         start_time = time.time()
 
-        inputs = tokenizer.encode(input_text, return_tensors="pt")
+        # Encode input with attention mask
+        inputs = tokenizer(input_text, return_tensors="pt", padding=True, truncation=True)
+        input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
 
         with torch.no_grad():
             # Standard generation without uncertainty calculations
             generated = model.generate(
-                inputs,
+                input_ids,
+                attention_mask=attention_mask,
                 max_length=max_length,
                 num_return_sequences=1,
                 do_sample=False,
@@ -243,26 +250,47 @@ class UncertaintyCalculator:
 
             # Try to load model with error handling for large models
             try:
-                model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    dtype=torch.float16,
+                    device_map="auto"
+                )
             except Exception as model_error:
                 logger.warning("Failed to load model with auto device mapping: " + str(model_error))
-                model = AutoModelForCausalLM.from_pretrained(model_name)
+                try:
+                    model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float16)
+                except Exception as fallback_error:
+                    logger.warning("Failed to load with dtype=float16: " + str(fallback_error))
+                    model = AutoModelForCausalLM.from_pretrained(model_name)
 
             model.eval()
 
             # Calculate Standard/Traditional approach (baseline)
-            standard_results = self.calculate_standard_metric(
-                model, tokenizer, input_text, metric_type, max_length
-            )
+            try:
+                standard_results = self.calculate_standard_metric(
+                    model, tokenizer, input_text, metric_type, max_length
+                )
+                logger.info("Standard calculation completed")
+            except Exception as e:
+                logger.error("Standard calculation failed: " + str(e))
+                raise Exception("Standard calculation failed: " + str(e))
 
             # Calculate PBA optimized approach
-            pba_results = self.calculate_pba_metric(
-                model_name, input_text, metric_type, max_length
-            )
+            try:
+                pba_results = self.calculate_pba_metric(
+                    model_name, input_text, metric_type, max_length
+                )
+                logger.info("PBA calculation completed")
+            except Exception as e:
+                logger.error("PBA calculation failed: " + str(e))
+                raise Exception("PBA calculation failed: " + str(e))
 
             # Calculate computational efficiency
-            standard_time = standard_results["processing_time"]
-            pba_time = pba_results["processing_time"]
+            standard_time = standard_results.get("processing_time", 0)
+            pba_time = pba_results.get("processing_time", 0)
+
+            if standard_time == 0 or pba_time == 0:
+                raise Exception("Invalid processing times: standard=" + str(standard_time) + ", pba=" + str(pba_time))
 
             # PBA should be faster - calculate efficiency gain
             efficiency_gain = ((standard_time - pba_time) / standard_time) * 100  # Positive means PBA is faster
@@ -276,6 +304,8 @@ class UncertaintyCalculator:
                 "pba_speedup": pba_speedup,
                 "success": True
             })
+
+            logger.info("Comparison completed successfully")
 
         except Exception as e:
             logger.error("Comparison error: " + str(e))
@@ -302,11 +332,15 @@ def uncertainty_calculation_interface(model_name, input_text, metric_type, max_l
         return "Error: " + results.get("error", "Unknown error"), None, None
 
     # Format results for display
-    standard = results["standard"]
-    pba = results["pba"]
+    standard = results.get("standard")
+    pba = results.get("pba")
+
+    # Check if we have valid results
+    if not standard or not pba:
+        return "Error: Failed to get calculation results. Check model compatibility.", None, None
 
     # Model response should be the same for both approaches
-    model_response = "**Generated Text:** " + standard["generated_text"]
+    model_response = "**Generated Text:** " + standard.get("generated_text", "No text generated")
 
     # Create metric comparison table
     metric_names = {
