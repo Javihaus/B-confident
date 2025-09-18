@@ -34,6 +34,10 @@ class UncertaintyCalculator:
     """Focused uncertainty calculation with PBA vs Direct comparison"""
 
     def __init__(self):
+        # Model caching for faster subsequent runs
+        self.model_cache = {}
+        self.tokenizer_cache = {}
+
         # Production models for uncertainty quantification testing
         self.available_models = {
             "meta-llama/Llama-3.2-8B": "Llama 3.2 8B * (GPU)",
@@ -66,14 +70,17 @@ class UncertaintyCalculator:
         attention_mask = inputs["attention_mask"]
 
         with torch.no_grad():
-            # Generate text first - fix the max_length conflict
+            # Optimized generation for faster inference
+            max_new_tokens = min(max_length - input_ids.shape[1], 20)  # Limit for demo speed
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=max_length - input_ids.shape[1],  # Use max_new_tokens instead of max_length
+                max_new_tokens=max_new_tokens,
                 num_return_sequences=1,
                 do_sample=False,
-                pad_token_id=tokenizer.eos_token_id
+                pad_token_id=tokenizer.eos_token_id,
+                use_cache=True,           # Enable KV cache for speed
+                early_stopping=True      # Stop at EOS token
             )
             generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
 
@@ -234,14 +241,17 @@ class UncertaintyCalculator:
         attention_mask = inputs["attention_mask"]
 
         with torch.no_grad():
-            # Standard generation without uncertainty calculations
+            # Optimized baseline generation
+            max_new_tokens = min(max_length - input_ids.shape[1], 20)  # Limit for demo speed
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=max_length - input_ids.shape[1],  # Use max_new_tokens instead of max_length
+                max_new_tokens=max_new_tokens,
                 num_return_sequences=1,
                 do_sample=False,
-                pad_token_id=tokenizer.eos_token_id
+                pad_token_id=tokenizer.eos_token_id,
+                use_cache=True,           # Enable KV cache for speed
+                early_stopping=True      # Stop at EOS token
             )
 
             generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
@@ -267,28 +277,48 @@ class UncertaintyCalculator:
         }
 
         try:
-            # Load model for standard calculations
-            logger.info("Loading model: " + model_name)
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            if tokenizer.pad_token is None:
-                tokenizer.pad_token = tokenizer.eos_token
+            # Check cache first for faster subsequent runs
+            if model_name in self.model_cache:
+                logger.info("Using cached model: " + model_name)
+                model = self.model_cache[model_name]
+                tokenizer = self.tokenizer_cache[model_name]
+            else:
+                # Load model for standard calculations
+                logger.info("Loading model: " + model_name)
+                tokenizer = AutoTokenizer.from_pretrained(model_name)
+                if tokenizer.pad_token is None:
+                    tokenizer.pad_token = tokenizer.eos_token
 
-            # Try to load model with error handling for large models
+                # Optimized model loading for faster performance
             try:
                 model = AutoModelForCausalLM.from_pretrained(
                     model_name,
-                    dtype=torch.float16,
-                    device_map="auto"
+                    torch_dtype=torch.float16,  # Use float16 for speed
+                    device_map="auto",          # Automatic device placement
+                    low_cpu_mem_usage=True,     # Reduce CPU memory usage
+                    trust_remote_code=True      # Allow custom model code
                 )
+                logger.info("Model loaded with accelerate optimizations")
             except Exception as model_error:
-                logger.warning("Failed to load model with auto device mapping: " + str(model_error))
+                logger.warning("Failed to load model with accelerate optimizations: " + str(model_error))
                 try:
-                    model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float16)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_name,
+                        torch_dtype=torch.float16,
+                        low_cpu_mem_usage=True
+                    )
+                    logger.info("Model loaded with float16 optimization")
                 except Exception as fallback_error:
-                    logger.warning("Failed to load with dtype=float16: " + str(fallback_error))
+                    logger.warning("Failed to load with optimizations: " + str(fallback_error))
                     model = AutoModelForCausalLM.from_pretrained(model_name)
+                    logger.info("Model loaded with default settings")
 
-            model.eval()
+                model.eval()
+
+                # Cache the model and tokenizer for faster subsequent runs
+                self.model_cache[model_name] = model
+                self.tokenizer_cache[model_name] = tokenizer
+                logger.info("Model cached for future use")
 
             # Calculate Standard/Traditional approach (baseline)
             try:
@@ -454,6 +484,8 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
     **Select a specific uncertainty metric** to compare how Direct vs PBA approaches calculate it. Both should yield similar metric values, but PBA should be more computationally efficient.
 
     **HuggingFace Spaces Note**: Large models can't run with default HF CPU and need GPU version. Models marked with * require GPU resources.
+
+    **Performance**: Models are cached after first load and use optimized generation (float16, accelerate) for faster inference.
     """)
 
     with gr.Row():
