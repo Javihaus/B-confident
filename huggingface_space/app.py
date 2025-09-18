@@ -66,11 +66,11 @@ class UncertaintyCalculator:
         attention_mask = inputs["attention_mask"]
 
         with torch.no_grad():
-            # Generate text first
+            # Generate text first - fix the max_length conflict
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_length=max_length,
+                max_new_tokens=max_length - input_ids.shape[1],  # Use max_new_tokens instead of max_length
                 num_return_sequences=1,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id
@@ -78,9 +78,34 @@ class UncertaintyCalculator:
             generated_text = tokenizer.decode(generated[0], skip_special_tokens=True)
 
             # Standard/Traditional calculation approach (expensive)
-            # Shared forward pass
+            # Shared forward pass - get logits for next token prediction
             outputs = model(input_ids, attention_mask=attention_mask)
-            logits = outputs.logits[0, -1, :]
+
+            # Debug: check outputs
+            logger.info("Input IDs shape: " + str(input_ids.shape))
+            logger.info("Outputs type: " + str(type(outputs)))
+
+            if outputs is None:
+                raise Exception("Model outputs are None")
+            if not hasattr(outputs, 'logits'):
+                raise Exception("Model outputs do not have logits attribute. Available attributes: " + str(dir(outputs)))
+            if outputs.logits is None:
+                raise Exception("Model outputs.logits is None")
+
+            logger.info("Logits shape: " + str(outputs.logits.shape))
+            if len(outputs.logits.shape) < 3:
+                raise Exception("Logits shape is incorrect: " + str(outputs.logits.shape))
+
+            # Get logits for the last token position for next token prediction
+            sequence_length = input_ids.shape[1]
+            logits_seq_len = outputs.logits.shape[1]
+            logger.info("Sequence length: " + str(sequence_length) + ", Logits sequence length: " + str(logits_seq_len))
+
+            if sequence_length > logits_seq_len:
+                raise Exception("Sequence length " + str(sequence_length) + " exceeds logits dimensions " + str(logits_seq_len))
+
+            logits = outputs.logits[0, sequence_length - 1, :]  # Last position of input sequence
+            logger.info("Extracted logits shape: " + str(logits.shape))
             hidden_states = outputs.hidden_states[-1] if hasattr(outputs, 'hidden_states') else None
 
             if metric_type == "max_probability":
@@ -213,7 +238,7 @@ class UncertaintyCalculator:
             generated = model.generate(
                 input_ids,
                 attention_mask=attention_mask,
-                max_length=max_length,
+                max_new_tokens=max_length - input_ids.shape[1],  # Use max_new_tokens instead of max_length
                 num_return_sequences=1,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id
