@@ -434,8 +434,6 @@ with gr.Blocks(title="B-Confident: Uncertainty Calculation Comparison", theme=gr
     uncertainty_wrapper = UncertaintyWrapper(standard_pipeline)
     ```
 
-    **Community Integration Strategy**: Drop-in replacement that reduces complexity rather than increasing it. Make uncertainty quantification feel like a standard pipeline parameter.
-
     **Repository:** [B-Confident on GitHub](https://github.com/javiermarin/b-confident)
     """)
 
